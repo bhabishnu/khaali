@@ -85,43 +85,27 @@ async function fetchDoc({ uri }) {
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode((await creds()).clientSecret),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     if (b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, buf))) !== hmac) {
-      throw new Error('The document failed DigiLocker’s integrity check, so Khali did not attach it.');
+      throw new Error('The document failed DigiLocker’s integrity check, so Khaali did not attach it.');
     }
   }
   return { type: (res.headers.get('Content-Type') || 'application/pdf').split(';')[0], data: b64(new Uint8Array(buf)) };
 }
 
-// ---------- Khali Locker: your documents in a Google Drive folder ----------
-// The drive.file scope only lets Khali see files it created, so the rest of your Drive stays private.
+// ---------- Khaali Locker: your documents in a Google Drive folder ----------
+// The drive.file scope only lets Khaali see files it created, so the rest of your Drive stays private.
 const DRIVE = 'https://www.googleapis.com/drive/v3';
-const FOLDER = 'Khali Locker';
+const FOLDER = 'Khaali Locker';
 
+// Chrome's own Google sign-in, using Khaali's client ID from manifest.json. Chrome keeps and refreshes the token.
 async function googleToken(interactive) {
-  const { gtoken } = await chrome.storage.session.get('gtoken');
-  if (gtoken?.expires > Date.now()) return gtoken.value;
-  const { googleClientId, driveUser } = await chrome.storage.local.get(['googleClientId', 'driveUser']);
-  if (!googleClientId) throw new Error('Connect Google Drive in Khali settings first.');
-
-  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
-  const signIn = async silent => {
-    const params = {
-      client_id: googleClientId, redirect_uri: chrome.identity.getRedirectURL(), response_type: 'token',
-      scope: 'https://www.googleapis.com/auth/drive.file', state,
-    };
-    if (silent) Object.assign(params, { prompt: 'none' }, driveUser && { login_hint: driveUser.email });
-    const back = await chrome.identity.launchWebAuthFlow({
-      url: 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams(params), interactive: !silent,
-    });
-    const p = new URLSearchParams(new URL(back).hash.slice(1));
-    if (p.get('state') !== state) throw new Error('Google sign-in failed, please try again');
-    return p.get('access_token') ? p : null;
-  };
-  // Try without a popup first; Google only shows one when it needs you.
-  let p = await signIn(true).catch(() => null);
-  if (!p && interactive) p = await signIn(false);
-  if (!p) throw new Error(interactive ? 'Google sign-in was cancelled' : 'Sign in to Google Drive again from Khali settings.');
-  await chrome.storage.session.set({ gtoken: { value: p.get('access_token'), expires: Date.now() + (p.get('expires_in') - 60) * 1000 } });
-  return p.get('access_token');
+  if (chrome.runtime.getManifest().oauth2.client_id.startsWith('REPLACE')) {
+    throw new Error('Google sign-in isn’t set up in this build of Khaali yet.');
+  }
+  try {
+    return (await chrome.identity.getAuthToken({ interactive })).token;
+  } catch {
+    throw new Error(interactive ? 'Google sign-in was cancelled.' : 'Connect Google Drive again from Khaali settings.');
+  }
 }
 
 async function gapi(path, { interactive = true, ...opts } = {}, retry = true) {
@@ -130,7 +114,7 @@ async function gapi(path, { interactive = true, ...opts } = {}, retry = true) {
     ...opts, headers: { Authorization: `Bearer ${token}`, ...opts.headers },
   });
   if (res.status === 401 && retry) {
-    await chrome.storage.session.remove('gtoken');
+    await chrome.identity.removeCachedAuthToken({ token }); // expired or revoked: ask Chrome for a fresh one
     return gapi(path, { interactive, ...opts }, false);
   }
   if (res.status === 404) throw new Error('That file is no longer in your Google Drive.');
@@ -142,11 +126,11 @@ const json = { 'Content-Type': 'application/json' };
 
 // Keeps an index of locker files in storage so forms can check what's available without a network call.
 async function lockerList({ interactive = true } = {}) {
-  const q = "appProperties has { key='khali' and value='doc' } and trashed=false";
+  const q = "appProperties has { key='khaali' and value='doc' } and trashed=false";
   const fields = 'files(id,name,mimeType,size,modifiedTime,webViewLink,appProperties)';
   const res = await gapi('/files?' + new URLSearchParams({ q, fields, orderBy: 'modifiedTime desc', pageSize: '100' }), { interactive });
   const locker = (await res.json()).files.map(f => ({
-    id: f.id, kind: f.appProperties.khaliType, name: f.name, type: f.mimeType, size: +f.size, modified: f.modifiedTime, link: f.webViewLink,
+    id: f.id, kind: f.appProperties.khaaliType, name: f.name, type: f.mimeType, size: +f.size, modified: f.modifiedTime, link: f.webViewLink,
   }));
   await chrome.storage.local.set({ locker });
   return locker;
@@ -170,20 +154,22 @@ async function driveConnect() {
 }
 
 async function driveDisconnect() {
-  const { gtoken } = await chrome.storage.session.get('gtoken');
-  if (gtoken) await fetch(`https://oauth2.googleapis.com/revoke?token=${gtoken.value}`, { method: 'POST' }).catch(() => {});
-  await chrome.storage.session.remove('gtoken');
+  const token = await googleToken(false).catch(() => null);
+  if (token) {
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method: 'POST' }).catch(() => {});
+    await chrome.identity.removeCachedAuthToken({ token });
+  }
   await chrome.storage.local.remove(['driveUser', 'locker']);
 }
 
 async function lockerUpload({ kind, name, mime, data }) {
-  const meta = { name, parents: [await lockerFolder()], appProperties: { khali: 'doc', khaliType: kind } };
+  const meta = { name, parents: [await lockerFolder()], appProperties: { khaali: 'doc', khaaliType: kind } };
   const body = new Blob([
-    `--khali\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`,
-    `--khali\r\nContent-Type: ${mime}\r\n\r\n`, fromB64(data), '\r\n--khali--',
+    `--khaali\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`,
+    `--khaali\r\nContent-Type: ${mime}\r\n\r\n`, fromB64(data), '\r\n--khaali--',
   ]);
   await gapi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-    method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=khali' }, body,
+    method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=khaali' }, body,
   });
   return lockerList();
 }

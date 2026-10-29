@@ -1,7 +1,7 @@
-// Upload fields Khali knows. Shared by the content script (spotting fields) and settings (Khali Locker types).
+// Upload fields Khaali knows. Shared by the content script (spotting fields) and settings (Khaali Locker types).
 // Order matters, first match wins: "Photo ID proof" is identity, "Passport-size photo" is a photo,
 // and "Higher secondary" is class 12, not class 10.
-// locker: true means the document can be kept in the Khali Locker on Google Drive.
+// locker: true means the document can be kept in the Khaali Locker on Google Drive.
 const FILES = [
   { kind: 'aadhaar', label: 'Aadhaar card', locker: true, re: /aadhaa?r|identity\s*proof|id\s*proof|proof\s*of\s*identity|\bpoi\b/i },
   { kind: 'pan', label: 'PAN card', locker: true, re: /\bpan\b|permanent\s*account/i },

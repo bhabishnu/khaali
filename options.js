@@ -46,7 +46,7 @@ form.elements.pin.addEventListener('input', async e => {
   pinHint.textContent = '';
   if (pin.length !== 6) return;
   const { states, districts, pins } = await places;
-  if (pins[pin] === undefined) return (pinHint.textContent = 'Khali doesn’t know this PIN. Check it, or pick the district and state yourself.');
+  if (pins[pin] === undefined) return (pinHint.textContent = 'Khaali doesn’t know this PIN. Check it, or pick the district and state yourself.');
   const [district, si] = districts[pins[pin]];
   form.elements.state.value = states[si];
   form.elements.district.value = district;
@@ -131,7 +131,7 @@ form.addEventListener('submit', async e => {
   say('Saved', 'saved');
 });
 
-// ---------- Khali Locker (Google Drive) ----------
+// ---------- Khaali Locker (Google Drive) ----------
 const LOCKER_KINDS = FILES.filter(f => f.locker);
 const FILE_ICON = svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
 const $ = id => document.getElementById(id);
@@ -166,19 +166,13 @@ function renderDrive({ driveUser, locker = [] }) {
 
 const loadDrive = () => chrome.storage.local.get(['driveUser', 'locker']).then(renderDrive);
 chrome.storage.onChanged.addListener(changes => (changes.driveUser || changes.locker) && loadDrive());
-chrome.storage.local.get(['googleClientId', 'driveUser']).then(({ googleClientId = '', driveUser }) => {
-  $('google-client').value = googleClientId;
+chrome.storage.local.get('driveUser').then(({ driveUser }) => {
   loadDrive();
   // Refresh from Drive in case files changed elsewhere; stay quiet if Google needs a fresh sign-in.
   if (driveUser) send({ type: 'lockerList', interactive: false });
 });
 
 $('drive-connect').addEventListener('click', async () => {
-  const clientId = $('google-client').value.trim();
-  if (!clientId.endsWith('.apps.googleusercontent.com')) {
-    return lockerSay('That doesn’t look like a Google client ID. It ends in .apps.googleusercontent.com.', 'error');
-  }
-  await chrome.storage.local.set({ googleClientId: clientId });
   $('drive-connect').disabled = true;
   lockerSay('Finish signing in on the Google window.');
   const res = await send({ type: 'driveConnect' });
@@ -188,7 +182,7 @@ $('drive-connect').addEventListener('click', async () => {
 
 $('drive-disconnect').addEventListener('click', async () => {
   await send({ type: 'driveDisconnect' });
-  lockerSay('Disconnected. Your documents are still in the Khali Locker folder in your Drive.');
+  lockerSay('Disconnected. Your documents are still in the Khaali Locker folder in your Drive.');
 });
 
 $('doc-file').addEventListener('change', async e => {
@@ -204,7 +198,7 @@ $('doc-file').addEventListener('change', async e => {
     fr.readAsDataURL(file);
   });
   const res = await send({ type: 'lockerUpload', kind: $('doc-kind').value, name: file.name, mime: file.type, data });
-  lockerSay(res.error || `${file.name} is in your Khali Locker.`, res.error ? 'error' : 'saved');
+  lockerSay(res.error || `${file.name} is in your Khaali Locker.`, res.error ? 'error' : 'saved');
 });
 
 $('docs').addEventListener('click', async e => {
@@ -225,7 +219,7 @@ const born = iso => iso ? new Date(`${iso}T00:00`).toLocaleDateString('en-IN', {
 // Barcode-style strip: one bar per detail, its stroke widths drawn from the value; a missing detail leaves a gap.
 const strokes = v => [0, 1, 2, 3].map(i => 1 + ((v.charCodeAt((i * 3) % v.length) + i) % 4));
 
-// Changes Khali makes for you (district and state from a PIN) stay lit until you look at them.
+// Changes Khaali makes for you (district and state from a PIN) stay lit until you look at them.
 const lit = new Set();
 const light = (...keys) => {
   keys.forEach(k => lit.add(k));

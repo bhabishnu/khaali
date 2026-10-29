@@ -5,3 +5,9 @@ task.md
 .impeccable/mocks/
 .impeccable/questions/
 .impeccable/hook.cache.json
+khaali-key.pem
+PRODUCT.md
+DESIGN.md
+.impeccable/surfaces/
+.claude/
+promo/node_modules/
