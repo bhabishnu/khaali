@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seva test form</title>
+  <!-- Local test page for Seva. Serve it on localhost: python3 -m http.server 8000 (from the repo root). -->
+  <style>
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f3f5f7; color: #1d2733; }
+    .bar { background: #24489a; color: #fff; padding: 14px 24px; font-weight: 700; }
+    main { max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    section { background: #fff; border-radius: 10px; padding: 20px; }
+    section[hidden] { display: none; }
+    .grid { display: grid; grid-template-columns: 180px 1fr; gap: 12px 16px; align-items: center; }
+    input:not([type=radio]), textarea { font: inherit; padding: 8px; border: 1px solid #c9d1da; border-radius: 6px; }
+    .actions { margin-top: 20px; display: flex; gap: 8px; }
+    button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid #24489a; background: #24489a; color: #fff; cursor: pointer; }
+    button.back { background: #fff; color: #24489a; }
+    dl { display: grid; grid-template-columns: 180px 1fr; gap: 6px; }
+    dt { color: #67727e; } dd { margin: 0; }
+  </style>
+</head>
+<body>
+<div class="bar">Demo Services Portal (test page, not a government site)</div>
+<main>
+  <h1>Driving Licence: New Application</h1>
+  <form id="app">
+    <section id="s1">
+      <h2>1. Applicant details</h2>
+      <div class="grid">
+        <label for="fullName">Full name *</label><input id="fullName" name="fullName">
+        <label for="fatherName">Father's name *</label><input id="fatherName" name="fatherName">
+        <label for="dob">Date of birth *</label><input id="dob" name="dob" type="date">
+        <span>Gender *</span>
+        <span>
+          <label><input type="radio" name="gender" value="M"> Male</label>
+          <label><input type="radio" name="gender" value="F"> Female</label>
+          <label><input type="radio" name="gender" value="T"> Transgender</label>
+        </span>
+        <label for="addr">Residential address *</label><textarea id="addr" name="addr" rows="2"></textarea>
+        <label for="mob">Mobile number *</label><input id="mob" name="mob" maxlength="10">
+        <label for="mail">Email address *</label><input id="mail" name="mail" type="email">
+      </div>
+      <div class="actions"><button type="button" data-go="s2">Save and continue</button></div>
+    </section>
+
+    <section id="s2" hidden>
+      <h2>2. Upload supporting documents</h2>
+      <div class="grid">
+        <label for="idProof">Identity proof * (Aadhaar / Passport)</label><input id="idProof" name="idProof" type="file" accept=".pdf,.jpg,.png">
+        <label for="addrProof">Address proof * (utility bill)</label><input id="addrProof" name="addrProof" type="file" accept=".pdf,.jpg,.png">
+        <label for="photo">Photograph * (JPG, 3.5 cm × 4.5 cm, 20–50 KB)</label><input id="photo" name="photo" type="file" accept=".jpg,.jpeg">
+        <label for="sign">Signature * (JPG, 10–20 KB)</label><input id="sign" name="sign" type="file" accept=".jpg,.jpeg">
+      </div>
+      <div class="actions"><button type="button" class="back" data-go="s1">Back</button><button type="button" data-go="s3">Save and continue</button></div>
+    </section>
+
+    <section id="s3" hidden>
+      <h2>3. Review your application</h2>
+      <dl id="review"></dl>
+      <div class="actions"><button type="button" class="back" data-go="s2">Back</button><button>Submit application</button></div>
+    </section>
+  </form>
+  <p id="done" hidden></p>
+</main>
+<script>
+  const form = document.getElementById('app');
+  form.addEventListener('click', e => {
+    const go = e.target.dataset.go;
+    if (!go) return;
+    for (const s of form.querySelectorAll('section')) s.hidden = s.id !== go;
+    if (go === 's3') {
+      const d = new FormData(form);
+      document.getElementById('review').innerHTML = [...d].map(([k, v]) =>
+        `<dt>${k}</dt><dd>${v instanceof File ? (v.name ? `${v.name} (${v.size} bytes)` : '—') : (v || '—')}</dd>`).join('');
+    }
+  });
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    form.hidden = true;
+    const done = document.getElementById('done');
+    done.hidden = false;
+    done.textContent = 'Application submitted (test only).';
+  });
+</script>
+</body>
+</html>

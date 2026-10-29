@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seva settings</title>
+  <link rel="icon" href="icons/32.png">
+  <style>
+    @font-face {
+      font-family: "Seva Anek";
+      src: url("fonts/anek-latin.woff2") format("woff2");
+      font-weight: 100 800;
+      font-stretch: 75% 125%;
+      font-display: swap;
+    }
+    :root {
+      --bg: #f4f7f5; --surface: #fff; --ink: #12211a; --muted: #55655c; --line: #dfe7e2; --field: #fff;
+      --green: #17603c; --green-deep: #0d3f27; --green-soft: #e2f1e8;
+      --fill: #17603c; --fill-hover: #11502f; --lift: rgba(13, 63, 39, .45);
+      --saffron: #f2a93b; --warn: #855000; --warn-bg: #fff3d9;
+      --ease: cubic-bezier(.16, 1, .3, 1);
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0c1611; --surface: #121f18; --ink: #e6efe9; --muted: #9db0a5; --line: #26372e; --field: #0f1a14;
+        --green: #4cb77f; --green-soft: #183527; --fill: #1d7347; --fill-hover: #1a6740; --lift: rgba(0, 0, 0, .5); --warn: #f2c26b; --warn-bg: #2e2412;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    ::selection { background: var(--green-soft); color: var(--ink); }
+    html { scrollbar-color: var(--line) transparent; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 400 15px/1.55 "Seva Anek", system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .masthead { background: var(--green-deep); color: #fff; }
+    .masthead-inner { display: flex; align-items: center; gap: 14px; max-width: 920px; margin: 0 auto; padding: 28px 24px 30px; }
+    .tile {
+      display: grid; place-items: center; width: 44px; height: 44px; flex: none; border: 2px solid rgba(255, 255, 255, .92);
+      border-radius: 13px; font-weight: 700; font-size: 22px; line-height: 1;
+    }
+    .masthead h1 { margin: 0; font-size: 28px; line-height: 1; font-weight: 700; font-stretch: 110%; letter-spacing: -.015em; }
+    .masthead p { margin: 6px 0 0; color: rgba(255, 255, 255, .78); }
+    .private { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 8px 14px; border-radius: 99px; background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .92); font-size: 13.5px; }
+    .private .i { width: 16px; height: 16px; }
+
+    main { max-width: 920px; margin: 0 auto; padding: 8px 24px 120px; }
+    section { display: grid; grid-template-columns: 260px 1fr; gap: 32px; padding: 40px 0; }
+    section + section { border-top: 1px solid var(--line); }
+    .sec-head h2 { margin: 0 0 6px; font-size: 19px; line-height: 1.25; font-weight: 650; font-stretch: 105%; letter-spacing: -.01em; }
+    .sec-head p { margin: 0; color: var(--muted); font-size: 14px; text-wrap: pretty; }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 4px 10px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); font-size: 13px; font-weight: 600; }
+    .status-pill.ready { background: var(--green-soft); color: var(--green); }
+    .status-pill .i { width: 14px; height: 14px; }
+
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; align-content: start; }
+    .wide { grid-column: 1 / -1; }
+    label { display: grid; gap: 6px; font-size: 13.5px; font-weight: 600; }
+    input:not([type=file]), select, textarea {
+      width: 100%; min-height: 46px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--field); color: var(--ink); font: inherit; font-weight: 400;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    textarea { min-height: 76px; resize: vertical; }
+    input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
+    input:focus, select:focus, textarea:focus { outline: 3px solid color-mix(in srgb, var(--green) 25%, transparent); outline-offset: 0; border-color: var(--green); }
+    ::placeholder { color: var(--muted); opacity: 1; }
+
+    .uploads { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: start; }
+    .drop { display: grid; gap: 10px; cursor: pointer; }
+    .frame {
+      position: relative; display: grid; place-items: center; overflow: hidden; border: 1.5px dashed color-mix(in srgb, var(--green) 30%, var(--line));
+      border-radius: 16px; background: var(--surface); color: var(--muted); text-align: center;
+      transition: border-color .2s, background .2s, transform .3s var(--ease);
+    }
+    .photo .frame { aspect-ratio: 3.5 / 4.5; }
+    .signature .frame { aspect-ratio: 16 / 9; }
+    .drop:hover .frame { border-color: var(--green); background: color-mix(in srgb, var(--green-soft) 50%, var(--surface)); }
+    .drop:focus-within .frame { border-color: var(--green); outline: 3px solid color-mix(in srgb, var(--green) 25%, transparent); }
+    .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #fff; }
+    .signature .frame img { object-fit: contain; padding: 12px; }
+    .frame:has(img:not([hidden])) { border-style: solid; border-color: var(--line); }
+    .empty { display: grid; justify-items: center; gap: 6px; padding: 16px; font-size: 13px; font-weight: 400; }
+    .empty .i { width: 26px; height: 26px; color: var(--green); }
+    .empty b { color: var(--ink); font-weight: 600; }
+    .drop-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; }
+    .drop-label span { color: var(--green); font-weight: 600; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+    .redirect { display: flex; gap: 8px; align-items: stretch; }
+    .redirect code {
+      flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+      font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere;
+    }
+    .hint { margin: 0; color: var(--muted); font-size: 13.5px; font-weight: 400; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px;
+      border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+      font: inherit; font-weight: 600; cursor: pointer; transition: background .15s, transform .2s var(--ease);
+    }
+    .btn:hover { background: var(--bg); }
+    .btn:active { transform: scale(.98); }
+    .btn.primary {
+      border-color: transparent; background: var(--fill); color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px var(--lift), 0 6px 16px -6px var(--lift);
+    }
+    .btn.primary:hover { background: var(--fill-hover); }
+    :focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
+    .sr-only:focus-visible { outline: none; }
+
+    .savebar {
+      position: fixed; inset: auto 0 0 0; border-top: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px);
+    }
+    .savebar-inner { display: flex; align-items: center; justify-content: flex-end; gap: 16px; max-width: 920px; margin: 0 auto; padding: 12px 24px; }
+    #status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+    #status.saved { color: var(--green); }
+    #status.error { color: #b42318; }
+
+    @media (max-width: 760px) {
+      .masthead-inner { flex-wrap: wrap; padding: 22px 16px; }
+      .private { margin-left: 0; }
+      main { padding: 0 16px 120px; }
+      section { grid-template-columns: 1fr; gap: 18px; padding: 28px 0; }
+      .fields, .uploads { grid-template-columns: 1fr; }
+      .uploads .photo { max-width: 200px; }
+      .savebar-inner { padding: 12px 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-inner">
+    <span class="tile">S</span>
+    <div>
+      <h1>Seva</h1>
+      <p>One profile. Every form.</p>
+    </div>
+    <span class="private">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/></svg>
+      Stored only in this browser
+    </span>
+  </div>
+</header>
+
+<main>
+  <form id="f">
+    <section>
+      <div class="sec-head">
+        <h2>Your details</h2>
+        <p>Seva offers these on government forms and fills them only after you approve.</p>
+      </div>
+      <div class="fields">
+        <label class="wide">Full name <input name="name" autocomplete="name" placeholder="As on your Aadhaar"></label>
+        <label>Date of birth <input name="dob" type="date" autocomplete="bday"></label>
+        <label>Gender
+          <select name="gender">
+            <option value="">Select</option><option>Male</option><option>Female</option><option>Transgender</option>
+          </select>
+        </label>
+        <label class="wide">Residential address <textarea name="address" rows="2" autocomplete="street-address" placeholder="House, street, city, state, PIN"></textarea></label>
+        <label>Mobile number <input name="mobile" type="tel" autocomplete="tel" placeholder="98450 12345"></label>
+        <label>Email address <input name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Photo and signature</h2>
+        <p>Add them once. Seva crops and compresses a copy to each form's size rules when you attach it.</p>
+      </div>
+      <div class="uploads">
+        <label class="drop photo">
+          <span class="drop-label">Passport-size photo <span data-for="photo">Add</span></span>
+          <span class="frame">
+            <span class="empty">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/></svg>
+              <b>Choose a photo</b>Plain background, face centred
+            </span>
+            <img id="photo-preview" alt="Your saved photo" hidden>
+          </span>
+          <input class="sr-only" name="photo" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+        <label class="drop signature">
+          <span class="drop-label">Signature <span data-for="signature">Add</span></span>
+          <span class="frame">
+            <span class="empty">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16c2.5 0 3.5-8 6-8s1 7 3 7 2.5-3 4-3 1.5 2 5 2"/><path d="M3 20.5h18"/></svg>
+              <b>Choose a signature</b>Dark ink on white paper
+            </span>
+            <img id="signature-preview" alt="Your saved signature" hidden>
+          </span>
+          <input class="sr-only" name="signature" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>DigiLocker</h2>
+        <p>Fetching your real Aadhaar needs partner credentials from API Setu. Without them, Seva attaches a sample PDF so you can try the flow.</p>
+        <span class="status-pill" id="dl-status">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/></svg>
+          <span>Demo mode</span>
+        </span>
+      </div>
+      <div class="fields">
+        <label>Client ID <input name="clientId" autocomplete="off" spellcheck="false"></label>
+        <label>Client secret <input name="clientSecret" type="password" autocomplete="off"></label>
+        <div class="wide" style="display: grid; gap: 6px;">
+          <span style="font-size: 13.5px; font-weight: 600;">Redirect URI</span>
+          <div class="redirect"><code id="redirect"></code><button class="btn" type="button" id="copy">Copy</button></div>
+          <p class="hint">Register this exact URI with DigiLocker when you create your client.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="savebar">
+      <div class="savebar-inner">
+        <span id="status" role="status"></span>
+        <button class="btn primary">Save changes</button>
+      </div>
+    </div>
+  </form>
+</main>
+<script src="options.js"></script>
+</body>
+</html>
