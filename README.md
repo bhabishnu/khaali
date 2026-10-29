@@ -2,6 +2,8 @@
 
 A Chrome extension that fills Indian government forms from a profile you save once, and attaches your documents from a Khaali Locker folder in your own Google Drive. Nothing is filled or attached until you approve it.
 
+[![Watch the Khaali film](assets/promo-poster.jpg)](promo/khaali-promo.mp4)
+
 ## Try it
 
 1. Open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and pick this folder.
@@ -19,9 +21,9 @@ src/
   documents.js    reads an Aadhaar, PAN card or passport (photo or PDF) on this computer
   options.html    settings page
   options.js
-assets/           fonts, icons, brand board
+assets/           fonts, icons, brand board, video poster
 lib/              jsQR, Tesseract.js (English) and pdf.js, bundled so nothing is fetched
 data/pins.json    offline PIN → district → state directory (data.gov.in)
 demo/form.html    local test form
-promo/            promo video source
+promo/            khaali-promo.mp4, the promo film (its source stays local)
 ```

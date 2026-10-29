@@ -10,4 +10,7 @@ DESIGN.md
 task.md
 demo.mp4
 khaali-key.pem
-promo/node_modules/
+
+# promo film source stays local; only the finished video is kept for the README
+promo/*
+!promo/khaali-promo.mp4
