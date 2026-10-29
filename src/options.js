@@ -65,8 +65,8 @@ for (const kind of IMAGES) {
     if (file) preview(kind, URL.createObjectURL(file));
   });
 }
-// The locker saves as you go, so its inputs don't count as unsaved profile changes.
-form.addEventListener('input', e => e.target.closest('#locker') || say('Unsaved changes'));
+// The locker saves as you go, and picking a document changes nothing until you approve, so neither counts as unsaved.
+form.addEventListener('input', e => e.target.closest('#locker, #start') || say('Unsaved changes'));
 form.addEventListener('input', () => renderDoc());
 form.addEventListener('change', () => renderDoc());
 
@@ -224,13 +224,14 @@ function renderDoc() {
   for (const [k, v] of Object.entries(shown)) {
     const seg = document.querySelector(`.seg[data-k="${k}"]`);
     const b = seg.querySelector('b');
+    const on = k === 'address' ? ['line1', 'line2', 'city'].some(x => lit.has(x)) : lit.has(k);
     b.textContent = v || 'Add';
-    if (lit.has(k)) b.insertAdjacentHTML('beforeend', '<span class="tag">Updated</span>');
+    if (on) b.insertAdjacentHTML('beforeend', '<span class="tag">Updated</span>');
     seg.classList.toggle('missing', !v);
-    seg.classList.toggle('lit', lit.has(k));
+    seg.classList.toggle('lit', on);
     seg.setAttribute('aria-label', `${seg.querySelector('.label').textContent}: ${v || 'not added'}. Edit`);
   }
-  for (const k of ['district', 'state']) form.elements[k].closest('label').classList.toggle('lit', lit.has(k));
+  for (const k of PROFILE) form.elements[k].closest('label').classList.toggle('lit', lit.has(k));
   for (const k of ['photo', 'signature']) {
     const src = vals[k] && $(`${k}-preview`).src;
     $(`doc-${k}`).classList.toggle('filled', !!src);
@@ -245,4 +246,133 @@ document.querySelector('.doc').addEventListener('click', e => {
   const field = form.elements[k === 'address' ? 'line1' : k];
   field.scrollIntoView({ block: 'center', behavior: 'smooth' });
   field.focus({ preventScroll: true });
+});
+
+// ---------- Start with a document (read on this computer, filled only after approval) ----------
+const SCAN_HINT = 'Khaali reads Aadhaar (best from its QR code), PAN cards and passports.';
+const docName = kind => (kind === 'passport' ? 'passport' : DOC_NAMES[kind]); // inside a sentence
+let found = null; // { kind, profile, file } read from the document, waiting for approval
+
+function scanSay(text, tone = '') {
+  $('scan-msg').className = `hint ${tone}`;
+  $('scan-msg').textContent = text;
+}
+scanSay(SCAN_HINT);
+
+function closeReview(text, tone) {
+  found = null; // drops the file too, unless it was just saved to the Locker
+  $('scan-review').hidden = true;
+  $('scan-list').innerHTML = '';
+  scanSay(text, tone);
+}
+
+async function readFiles(files) {
+  if (!files.length) return;
+  closeReview('');
+  if (files.some(f => !/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(f.type))) return scanSay('Choose a photo (JPG, PNG or WebP) or a PDF.', 'error');
+  $('scan-drop').setAttribute('aria-disabled', 'true');
+  try {
+    const { kind, source, profile } = await readDocument(files, await places, scanSay, askPassword);
+    if (kind === 'unknown') {
+      return scanSay('Khaali couldn’t tell what this document is. It reads Aadhaar, PAN cards and passports for now; type your details below instead.', 'error');
+    }
+    if (!READS[kind].some(k => profile[k])) throw new Error('nothing found');
+    found = { kind, profile, file: files.length === 1 ? files[0] : null };
+    await showReview(source);
+  } catch (e) {
+    if (e.message === 'cancelled') return scanSay(SCAN_HINT);
+    scanSay('Khaali couldn’t read details from this. Take the photo straight on, in good light, with the whole document in view, or type your details below.', 'error');
+  } finally {
+    $('scan-drop').removeAttribute('aria-disabled');
+  }
+}
+
+// A locked PDF asks for its password here. It goes straight to the PDF reader and is never stored.
+function askPassword(name, wrong) {
+  $('scan-pass-name').textContent = name;
+  $('scan-pass').hidden = false;
+  scanSay(wrong ? 'That password didn’t open it. Check the capitals and try again.' : 'This PDF is locked with a password.', wrong ? 'error' : '');
+  $('scan-pass-input').focus();
+  return new Promise(resolve => {
+    const stop = new AbortController(), on = { signal: stop.signal };
+    const done = value => {
+      stop.abort();
+      $('scan-pass-input').value = '';
+      $('scan-pass').hidden = true;
+      if (value != null) scanSay('Opening the PDF…');
+      resolve(value);
+    };
+    $('scan-pass-open').addEventListener('click', () => done($('scan-pass-input').value), on);
+    $('scan-pass-cancel').addEventListener('click', () => done(null), on);
+    // Enter would otherwise submit (save) the whole settings form.
+    $('scan-pass-input').addEventListener('keydown', e => e.key === 'Enter' && (e.preventDefault(), done(e.target.value)), on);
+  });
+}
+
+$('scan-file').addEventListener('change', e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  readFiles(files);
+});
+// Dropping files on the box works like choosing them.
+for (const [type, over] of [['dragenter', true], ['dragover', true], ['dragleave', false], ['drop', false]]) {
+  $('scan-drop').addEventListener(type, e => {
+    e.preventDefault();
+    $('scan-drop').classList.toggle('over', over);
+    if (type === 'drop') readFiles([...e.dataTransfer.files]);
+  });
+}
+
+const SOURCES = {
+  qr: [true, 'From the QR code', 'Read from the QR code UIDAI prints on the card.'],
+  mrz: [true, 'From the coded lines', 'Read from the two coded lines on the passport’s photo page.'],
+  text: [false, 'Read from the photo', 'Read from the printed text, which can go wrong. Check every value.'],
+  pdf: [false, 'Read from the PDF', 'Read from the PDF’s text, which may be laid out unusually. Check every value.'],
+};
+
+async function showReview(source) {
+  const { kind, profile } = found;
+  const [sure, tag, note] = SOURCES[source];
+  const fields = READS[kind];
+  const shown = (k, v) => (k === 'dob' ? born(v) : v);
+  $('scan-title').textContent = `${DOC_NAMES[kind]} · check before filling`;
+  $('scan-source').classList.toggle('ready', sure);
+  $('scan-source').innerHTML = `${sure ? CHECK : ALERT}<span>${tag}</span>`;
+  $('scan-list').innerHTML = fields.map(k => {
+    const v = profile[k], now = form.elements[k].value.trim();
+    return `<li class="${v ? '' : 'none'}"><span>${DOC_LABELS[k]}</span><b class="${k === 'dob' || k === 'pin' ? 'num' : ''}">${esc(shown(k, v) || 'Not found')}</b>${
+      v && now && now !== v ? `<small>Replaces ${esc(shown(k, now))}</small>` : ''}</li>`;
+  }).join('');
+  $('scan-note').textContent = note + (fields.some(k => !profile[k]) ? ' Add anything not found yourself.' : '');
+  // Keeping the file is offered when the Locker is connected and it's one file of a kind the Locker holds.
+  const { driveUser } = await chrome.storage.local.get('driveUser');
+  $('scan-keep-row').hidden = !(driveUser && found.file && LOCKER_KINDS.some(k => k.kind === kind));
+  scanSay(`Found details on your ${docName(kind)}. Check them below.`);
+  $('scan-review').hidden = false;
+  $('scan-review').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+$('scan-cancel').addEventListener('click', () => closeReview(SCAN_HINT));
+
+$('scan-approve').addEventListener('click', async () => {
+  const { kind, profile, file } = found;
+  const keep = !$('scan-keep-row').hidden && $('scan-keep').checked;
+  const changed = READS[kind].filter(k => profile[k] && form.elements[k].value.trim() !== profile[k]);
+  for (const k of changed) form.elements[k].value = profile[k];
+  districtList();
+  light(...changed);
+  if (changed.length) say('Unsaved changes');
+  const done = changed.length
+    ? `Filled ${changed.length} ${changed.length === 1 ? 'detail' : 'details'} from your ${docName(kind)}. Check them, then save.`
+    : `Your details already match your ${docName(kind)}.`;
+  closeReview(done, 'saved');
+  if (!keep) return;
+  scanSay(`${done} Saving it to your Khaali Locker…`, 'saved');
+  const data = await new Promise(r => {
+    const fr = new FileReader();
+    fr.onload = () => r(fr.result.split(',')[1]);
+    fr.readAsDataURL(file);
+  });
+  const res = await send({ type: 'lockerUpload', kind, name: file.name, mime: file.type, data });
+  scanSay(res.error ? `${done} It couldn’t be saved to your Locker: ${res.error}` : `${done} It’s also in your Khaali Locker.`, res.error ? 'error' : 'saved');
 });

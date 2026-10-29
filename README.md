@@ -16,9 +16,11 @@ src/
   background.js   service worker: Google sign-in and the Drive locker
   content.js      the in-page panel: field detection, filling, voice input
   kinds.js        document types and how forms label them
+  documents.js    reads an Aadhaar, PAN card or passport (photo or PDF) on this computer
   options.html    settings page
   options.js
 assets/           fonts, icons, brand board
+lib/              jsQR, Tesseract.js (English) and pdf.js, bundled so nothing is fetched
 data/pins.json    offline PIN → district → state directory (data.gov.in)
 demo/form.html    local test form
 promo/            promo video source
