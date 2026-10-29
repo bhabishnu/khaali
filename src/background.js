@@ -5,7 +5,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   const handlers = {
     // A section opens the settings page scrolled to it, e.g. the Khaali Locker.
     openOptions: ({ section }) => section
-      ? chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#${section}`) })
+      ? chrome.tabs.create({ url: chrome.runtime.getURL(`src/options.html#${section}`) })
       : chrome.runtime.openOptionsPage(),
     driveConnect, driveDisconnect, lockerList, lockerUpload, lockerRemove, lockerFetch,
   };

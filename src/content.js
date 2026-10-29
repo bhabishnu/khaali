@@ -327,7 +327,7 @@ const foot = (name, text) => `<p class="foot">${icon(name)}<span>${text}</span><
 
 // Bundled typefaces, added to the page's font set as bytes. If that fails, the panel uses the system font.
 let fontReady;
-const face = (family, file, axes) => fetch(chrome.runtime.getURL(`fonts/${file}`))
+const face = (family, file, axes) => fetch(chrome.runtime.getURL(`assets/fonts/${file}`))
   .then(r => r.arrayBuffer())
   .then(buf => document.fonts.add(new FontFace(family, buf, axes)));
 const loadFont = () => fontReady ??= Promise.all([

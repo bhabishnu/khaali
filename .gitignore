@@ -1,13 +1,13 @@
-demo.mp4
 .DS_Store
-task.md
-.impeccable/review/
-.impeccable/mocks/
-.impeccable/questions/
-.impeccable/hook.cache.json
-khaali-key.pem
+.claude/
+
+# impeccable design tooling and its notes
+.impeccable/
 PRODUCT.md
 DESIGN.md
-.impeccable/surfaces/
-.claude/
+
+# local only
+task.md
+demo.mp4
+khaali-key.pem
 promo/node_modules/

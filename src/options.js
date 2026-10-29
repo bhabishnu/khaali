@@ -23,7 +23,7 @@ function say(text, tone = '') {
 }
 
 // India Post's PIN directory, bundled so the lookup never leaves this computer.
-const places = fetch('data/pins.json').then(r => r.json());
+const places = fetch('../data/pins.json').then(r => r.json());
 const pinHint = document.getElementById('pin-hint');
 
 async function districtList() {
