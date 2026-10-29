@@ -137,8 +137,6 @@
 
     /* Khaali Locker */
     .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
-    .redirect { display: flex; gap: 8px; margin-top: 8px; }
-    .redirect code { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--field); color: var(--text); font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
     .account { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--surface); }
     .account .avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 2px; background: var(--text); color: var(--ground); font: 800 18px/1 var(--sans); font-stretch: 70%; }
     .account div { flex: 1; min-width: 0; }
@@ -316,20 +314,6 @@
             </div>
           </div>
           <p class="hint" id="locker-msg" role="status"></p>
-        </div>
-      </section>
-
-      <section id="digilocker">
-        <div class="sec-top"><h2>DigiLocker</h2><span class="status-tag" id="dl-status"></span></div>
-        <p class="lede">Fetching your real Aadhaar needs partner credentials from API Setu. Without them, Khaali attaches a sample PDF so you can try the flow.</p>
-        <div class="fields">
-          <label><span>Client ID</span><input name="clientId" autocomplete="off" spellcheck="false"></label>
-          <label><span>Client secret</span><input name="clientSecret" type="password" autocomplete="off"></label>
-          <div class="wide">
-            <span class="label">Redirect URI</span>
-            <div class="redirect"><code class="redirect-uri"></code><button class="btn" type="button" data-copy>Copy</button></div>
-            <p class="hint" style="margin-top: 8px">Register this exact URI with DigiLocker when you create your client.</p>
-          </div>
         </div>
       </section>
 

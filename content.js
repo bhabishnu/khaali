@@ -26,7 +26,7 @@ let profile = {};
 let images = {}; // { photo, signature }: data URLs saved in settings
 let locker = []; // index of Khaali Locker files on Google Drive, newest first
 let state = null; // 'open' while the panel waits on the user
-let pending = { fills: [], doc: null, locker: [], images: [] };
+let pending = { fills: [], locker: [], missing: [], images: [] };
 let filled = 0, attached = 0;
 let settled = []; // rows from the last fill, kept in the finished panel
 const notes = [];
@@ -410,8 +410,6 @@ const STYLES = `
   .btn:focus-visible, header button:focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
   .foot { display: flex; align-items: center; gap: 6px; color: var(--label); font: 500 10px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
   .foot .i { width: 13px; height: 13px; }
-  .callout { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 2px; background: var(--wash); color: var(--ink); font-size: 13px; }
-  .callout .i { width: 16px; height: 16px; margin-top: 2px; }
   .err { color: var(--danger); }
   .meta { display: flex; justify-content: space-between; color: var(--label); font: 500 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
   .lang { display: grid; gap: 6px; }
@@ -474,8 +472,8 @@ function close() {
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function next() {
-  if (pending.doc) return offerDoc();
   if (pending.locker.length) return offerLocker();
+  if (pending.missing.length) return offerMissing();
   if (pending.images.length) return offerImages();
   if (filled || attached) {
     return panel(`${title('check', 'All set', 'solid')}
@@ -506,12 +504,15 @@ function offerSetup() {
     ${foot('lock', 'Stored only in this browser')}`);
 }
 
-function offerDoc() {
-  panel(`${title('file', 'This form needs your Aadhaar')}
-    <p>Khaali can fetch the copy issued by UIDAI from your DigiLocker and attach it here.</p>
-    <div class="row"><button class="btn" data-act="skipDoc">Not now</button>
-      <button class="btn primary" data-act="findDoc">Use from DigiLocker</button></div>
-    ${foot('lock', 'Nothing is downloaded until you approve the document')}`);
+// The form asks for documents your Khaali Locker doesn't have yet: point to where they're added, once per page.
+function offerMissing() {
+  const labels = pending.missing.map(t => t.label);
+  const one = labels.length === 1;
+  panel(`${title('file', one ? `${labels[0]} isn’t in your Khaali Locker` : 'Some documents aren’t in your Khaali Locker')}
+    ${one ? '' : `<ul class="list">${labels.map(l => `<li><span>${icon('file')}${l}</span></li>`).join('')}</ul>`}
+    <p>Add ${one ? 'it' : 'them'} to your Khaali Locker once, and Khaali attaches ${one ? 'it' : 'them'} to forms like this after you approve.</p>
+    <div class="row"><button class="btn" data-act="skipMissing">Not now</button>
+      <button class="btn primary" data-act="openLocker">Open Khaali Locker</button></div>`);
 }
 
 function offerLocker() {
@@ -536,7 +537,7 @@ function offerImages() {
       <button class="btn primary" data-act="attachImages">Approve &amp; attach</button></div>`);
 }
 
-function showError(message, skip = 'skipDoc', retry = 'findDoc') {
+function showError(message, skip, retry) {
   panel(`${title('alert', 'Couldn’t get the document', 'danger')}
     <p class="err">${esc(message)}</p>
     <div class="row"><button class="btn" data-act="${skip}">Skip</button>
@@ -545,7 +546,7 @@ function showError(message, skip = 'skipDoc', retry = 'findDoc') {
 
 const actions = {
   close() {
-    pending = { fills: [], doc: null, locker: [], images: [] };
+    pending = { fills: [], locker: [], missing: [], images: [] };
     close();
   },
   settings: () => chrome.runtime.sendMessage({ type: 'openOptions' }),
@@ -599,33 +600,13 @@ const actions = {
     next();
   },
 
-  async findDoc() {
-    panel(`${title('spin', 'Checking DigiLocker')}
-      <p>Sign in on the DigiLocker window if it asks you to.</p>`);
-    const doc = await chrome.runtime.sendMessage({ type: 'findAadhaar' });
-    if (doc.error) return showError(doc.error);
-    pending.found = doc;
-    panel(`${title('shield', 'Approve document')}
-      <div class="tile"><span class="avatar square">${icon('file')}</span>
-        <div><b>${esc(doc.name)}</b><small>Issued by ${esc(doc.issuer)} · via DigiLocker</small></div></div>
-      <p>Attach this document to the application?</p>
-      ${doc.demo ? `<p class="callout">${icon('alert')}<span>Demo mode: Khaali will attach a sample PDF. Add your DigiLocker partner credentials in settings to fetch your real Aadhaar.</span></p>` : ''}
-      <div class="row"><button class="btn" data-act="skipDoc">Not now</button>
-        <button class="btn primary" data-act="attachDoc">Approve &amp; attach</button></div>`);
-  },
-  skipDoc() {
-    pending.doc = null;
+  skipMissing() {
+    pending.missing = [];
     next();
   },
-  async attachDoc() {
-    panel(title('spin', 'Attaching your Aadhaar'));
-    const { type, data, error } = await chrome.runtime.sendMessage({ type: 'fetchDoc', uri: pending.found.uri });
-    if (error) return showError(error);
-    attach(pending.doc, new File([fromB64(data)], `${pending.found.name}.${ext(type)}`, { type }));
-    pending.doc.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    attached++;
-    notes.push({ icon: 'file', text: `${pending.found.name} · from DigiLocker` });
-    pending.doc = null;
+  openLocker() {
+    chrome.runtime.sendMessage({ type: 'openOptions', section: 'locker' });
+    pending.missing = [];
     next();
   },
 
@@ -922,18 +903,19 @@ function check(force = false) {
   [...found, ...files].forEach(x => offered.add(x.el));
 
   const hasProfile = Object.values(profile).some(Boolean);
-  // A document in the Khaali Locker wins; Aadhaar falls back to DigiLocker when the locker has none.
+  // Documents the Khaali Locker holds are offered; the ones it doesn't get a pointer to add them, one row per kind.
   const inLocker = files.map(x => ({ ...x, doc: locker.find(d => d.kind === x.type.kind && accepts(x.el, d)) })).filter(x => x.doc);
+  const missing = files.filter(x => x.type.locker && !inLocker.some(l => l.el === x.el)).map(x => x.type);
   pending = {
     fills: found.filter(x => has(x.f.key)),
-    doc: files.find(x => x.type.kind === 'aadhaar' && !inLocker.some(l => l.el === x.el))?.el || null,
     locker: inLocker,
+    missing: [...new Set(missing)],
     images: files.filter(x => images[x.type.kind]).map(x => ({ ...x, spec: specFor(x.el, x.type) })),
   };
 
   if (pending.fills.length) offerFill();
   else if (found.length && !hasProfile) offerSetup();
-  else if (pending.doc || pending.locker.length || pending.images.length) next();
+  else if (pending.locker.length || pending.missing.length || pending.images.length) next();
   else if (force) panel(`${title('search', 'Nothing to fill here')}<p>Khaali didn’t find any fields it can fill on this page.</p>
     <button class="btn primary" data-act="dictate">Speak into a field</button>`, false);
 }

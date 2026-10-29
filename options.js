@@ -6,8 +6,6 @@ const svg = path => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${pat
 const CHECK = svg('<path d="M20 6 9 17l-5-5"/>');
 const ALERT = svg('<path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>');
 
-const redirect = chrome.identity.getRedirectURL();
-for (const el of document.querySelectorAll('.redirect-uri')) el.textContent = redirect;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const send = msg => chrome.runtime.sendMessage(msg);
 
@@ -17,12 +15,6 @@ function preview(kind, url) {
   img.hidden = !url;
   document.querySelector(`[data-for="${kind}"]`).textContent = url ? 'Replace' : 'Add';
   renderDoc();
-}
-
-function digilockerStatus(clientId) {
-  const pill = document.getElementById('dl-status');
-  pill.classList.toggle('ready', !!clientId);
-  pill.innerHTML = clientId ? `${CHECK}<span>Credentials saved</span>` : `${ALERT}<span>Demo mode</span>`;
 }
 
 function say(text, tone = '') {
@@ -55,17 +47,16 @@ form.elements.pin.addEventListener('input', async e => {
   pinHint.textContent = `District and state filled in from PIN ${pin}.`;
 });
 
-Promise.all([places, chrome.storage.local.get(['profile', 'clientId', 'clientSecret', ...IMAGES])]).then(([{ states }, saved]) => {
-  const { profile = {}, photo, signature, ...digilocker } = saved;
+Promise.all([places, chrome.storage.local.get(['profile', ...IMAGES])]).then(([{ states }, saved]) => {
+  const { profile = {}, photo, signature } = saved;
   form.elements.state.insertAdjacentHTML('beforeend', states.map(s => `<option>${esc(s)}</option>`).join(''));
   // Older profiles kept the address in one box; it moves into the first line until you split it up.
   if (profile.address && !profile.line1) profile.line1 = profile.address;
-  for (const [k, v] of Object.entries({ ...profile, ...digilocker })) if (form.elements[k]) form.elements[k].value = v;
+  for (const [k, v] of Object.entries(profile)) if (form.elements[k]) form.elements[k].value = v;
   districtList();
   renderDoc();
   preview('photo', photo);
   preview('signature', signature);
-  digilockerStatus(digilocker.clientId);
 });
 
 for (const kind of IMAGES) {
@@ -78,14 +69,6 @@ for (const kind of IMAGES) {
 form.addEventListener('input', e => e.target.closest('#locker') || say('Unsaved changes'));
 form.addEventListener('input', () => renderDoc());
 form.addEventListener('change', () => renderDoc());
-
-for (const btn of document.querySelectorAll('[data-copy]')) {
-  btn.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(redirect);
-    btn.textContent = 'Copied';
-    setTimeout(() => (btn.textContent = 'Copy'), 1500);
-  });
-}
 
 // Phone photos run to several MB; keep a 1600px JPEG master so storage stays small. Forms get their own size later.
 async function shrink(file) {
@@ -119,13 +102,9 @@ form.addEventListener('submit', async e => {
   }
   await chrome.storage.local.set({
     profile: Object.fromEntries(PROFILE.map(k => [k, data[k].trim()])), // drops the old single-box address
-    clientId: data.clientId.trim(),
-    clientSecret: data.clientSecret.trim(),
     ...images,
   });
-  await chrome.storage.session.remove('token'); // credentials may have changed
   for (const kind of IMAGES) form.elements[kind].value = '';
-  digilockerStatus(data.clientId.trim());
   lit.clear();
   renderDoc();
   say('Saved', 'saved');
