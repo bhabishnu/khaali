@@ -3,233 +3,365 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Seva settings</title>
+  <title>Khali settings</title>
   <link rel="icon" href="icons/32.png">
   <style>
-    @font-face {
-      font-family: "Seva Anek";
-      src: url("fonts/anek-latin.woff2") format("woff2");
-      font-weight: 100 800;
-      font-stretch: 75% 125%;
-      font-display: swap;
-    }
+    @font-face { font-family: "Khali Sans"; src: url("fonts/archivo.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
+    @font-face { font-family: "Khali Mono"; src: url("fonts/martian-mono.woff2") format("woff2"); font-weight: 100 800; font-stretch: 75% 112.5%; font-display: swap; }
+
     :root {
-      --bg: #f4f7f5; --surface: #fff; --ink: #12211a; --muted: #55655c; --line: #dfe7e2; --field: #fff;
-      --green: #17603c; --green-deep: #0d3f27; --green-soft: #e2f1e8;
-      --fill: #17603c; --fill-hover: #11502f; --lift: rgba(13, 63, 39, .45);
-      --saffron: #f2a93b; --warn: #855000; --warn-bg: #fff3d9;
+      --ground: #EEEFF1; --surface: #FFFFFF; --field: #FFFFFF; --text: #0B0D10; --label: #555B63;
+      --line: #D3D6DB; --rule: #C3C7CD; --slate: #1C2127; --on-slate: #F2F3F5; --slate-label: #A3AAB2; --slate-line: #2E343C;
+      --alert: #FFD400; --button: #0B0D10; --on-button: #FFFFFF; --danger: #B42318;
+      --sans: "Khali Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: "Khali Mono", ui-monospace, "SF Mono", Menlo, monospace;
       --ease: cubic-bezier(.16, 1, .3, 1);
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #0c1611; --surface: #121f18; --ink: #e6efe9; --muted: #9db0a5; --line: #26372e; --field: #0f1a14;
-        --green: #4cb77f; --green-soft: #183527; --fill: #1d7347; --fill-hover: #1a6740; --lift: rgba(0, 0, 0, .5); --warn: #f2c26b; --warn-bg: #2e2412;
+        --ground: #0B0D10; --surface: #13171C; --field: #171B21; --text: #F2F3F5; --label: #A3AAB2;
+        --line: #262C33; --rule: #343B44; --button: #F2F3F5; --on-button: #0B0D10; --danger: #FF8A7A;
         color-scheme: dark;
       }
     }
     * { box-sizing: border-box; }
-    ::selection { background: var(--green-soft); color: var(--ink); }
-    html { scrollbar-color: var(--line) transparent; }
-    body {
-      margin: 0; background: var(--bg); color: var(--ink);
-      font: 400 15px/1.55 "Seva Anek", system-ui, -apple-system, "Segoe UI", sans-serif;
-      -webkit-font-smoothing: antialiased;
+    [hidden] { display: none !important; }
+    html { scrollbar-color: var(--rule) transparent; scrollbar-width: thin; }
+    body { margin: 0; background: var(--ground); color: var(--text); font: 400 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--alert); color: #0B0D10; }
+    .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .label { font: 500 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--label); }
+    :focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
+
+    /* Top bar */
+    .topbar { background: #0B0D10; color: #F2F3F5; border-bottom: 1px solid #2E343C; }
+    .topbar-in { display: flex; align-items: center; gap: 14px; max-width: 1280px; height: 64px; margin: 0 auto; padding: 0 32px; }
+    .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 2px; background: #F2F3F5; color: #0B0D10; font: 800 18px/1 var(--sans); font-stretch: 70%; }
+    .wordmark { font: 800 24px/1 var(--sans); font-stretch: 68%; letter-spacing: .06em; }
+    .tagline { padding-left: 14px; border-left: 1px solid #3A4048; font: 500 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #A3AAB2; }
+    .private { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #A3AAB2; }
+
+    /* Layout: the profile document on the left, the editor on the right */
+    .layout { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 56px; max-width: 1280px; margin: 0 auto; padding: 32px 32px 120px; align-items: start; }
+
+    /* The profile document stays paper-white in both themes */
+    .doc { --label: #555B63; --line: #D3D6DB; position: sticky; top: 24px; border: 1px solid #C3C7CD; border-radius: 2px; background: #FFFFFF; color: #0B0D10; }
+    .doc-head { display: flex; justify-content: space-between; align-items: baseline; padding: 16px 20px 12px; }
+    .doc-head .count { font: 600 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    .strip { display: flex; gap: 5px; height: 46px; padding: 0 20px; }
+    .bar { display: flex; flex: 1; gap: 2px; }
+    .bar i { display: block; background: #0B0D10; }
+    .bar.gap { border: 1px dashed #8C929A; }
+    .tear { margin: 16px 0 0; border: 0; border-top: 1px dashed #C3C7CD; }
+    .seg {
+      display: flex; flex-direction: column; justify-content: flex-start; width: 100%; padding: 12px 20px 14px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit;
+      font: inherit; text-align: left; cursor: pointer; transition: background-color .2s var(--ease);
     }
-    .i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .seg:hover { background: #F4F5F6; }
+    .seg b { display: block; margin-top: 4px; font: 700 17px/1.25 var(--sans); font-stretch: 78%; letter-spacing: .01em; text-transform: uppercase; overflow-wrap: anywhere; }
+    .seg b.num { font: 600 14px/1.35 var(--mono); font-stretch: 75%; letter-spacing: 0; text-transform: none; }
+    .seg.name { border-top: 0; padding-top: 14px; }
+    .seg.name b { margin-top: 6px; font-size: 40px; line-height: 1; font-weight: 800; font-stretch: 66%; }
+    .seg.missing b { color: #6B7178; font-weight: 500; }
+    .seg.lit, .seg.lit:hover { background: var(--alert); }
+    .tag { display: inline-block; margin-left: 8px; padding: 2px 6px; border-radius: 2px; background: #0B0D10; color: #FFD400; font: 600 10px/1.3 var(--mono); letter-spacing: .08em; vertical-align: 1px; }
+    .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+    .row3 .seg { border-top: 0; padding-right: 12px; padding-left: 16px; }
+    .row3 .seg:first-child { padding-left: 20px; }
+    .row3 .seg b.num { font-size: 13px; }
+    .seg b.num { white-space: nowrap; }
+    .row3 .seg + .seg { border-left: 1px solid var(--line); }
+    .thumbs { display: grid; grid-template-columns: 1fr 2fr; border-top: 1px solid var(--line); }
+    .thumbs .seg { border-top: 0; }
+    .thumbs .seg + .seg { border-left: 1px solid var(--line); }
+    .thumb { position: relative; display: grid; place-items: center; height: 76px; margin-top: 8px; overflow: hidden; border: 1px dashed #C3C7CD; color: #6B7178; font: 500 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+    .thumb.filled { border-style: solid; border-color: #D3D6DB; }
 
-    .masthead { background: var(--green-deep); color: #fff; }
-    .masthead-inner { display: flex; align-items: center; gap: 14px; max-width: 920px; margin: 0 auto; padding: 28px 24px 30px; }
-    .tile {
-      display: grid; place-items: center; width: 44px; height: 44px; flex: none; border: 2px solid rgba(255, 255, 255, .92);
-      border-radius: 13px; font-weight: 700; font-size: 22px; line-height: 1;
-    }
-    .masthead h1 { margin: 0; font-size: 28px; line-height: 1; font-weight: 700; font-stretch: 110%; letter-spacing: -.015em; }
-    .masthead p { margin: 6px 0 0; color: rgba(255, 255, 255, .78); }
-    .private { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 8px 14px; border-radius: 99px; background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .92); font-size: 13.5px; }
-    .private .i { width: 16px; height: 16px; }
-
-    main { max-width: 920px; margin: 0 auto; padding: 8px 24px 120px; }
-    section { display: grid; grid-template-columns: 260px 1fr; gap: 32px; padding: 40px 0; }
-    section + section { border-top: 1px solid var(--line); }
-    .sec-head h2 { margin: 0 0 6px; font-size: 19px; line-height: 1.25; font-weight: 650; font-stretch: 105%; letter-spacing: -.01em; }
-    .sec-head p { margin: 0; color: var(--muted); font-size: 14px; text-wrap: pretty; }
-    .status-pill { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 4px 10px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); font-size: 13px; font-weight: 600; }
-    .status-pill.ready { background: var(--green-soft); color: var(--green); }
-    .status-pill .i { width: 14px; height: 14px; }
-
-    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; align-content: start; }
+    /* Editor */
+    main { min-width: 0; }
+    section { padding: 8px 0 40px; }
+    section + section { padding-top: 36px; border-top: 1px solid var(--rule); }
+    h2 { margin: 0 0 6px; font: 800 30px/1.05 var(--sans); font-stretch: 70%; letter-spacing: .01em; text-transform: uppercase; }
+    .lede { max-width: 62ch; margin: 0 0 22px; color: var(--label); }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; }
     .wide { grid-column: 1 / -1; }
-    label { display: grid; gap: 6px; font-size: 13.5px; font-weight: 600; }
-    input:not([type=file]), select, textarea {
-      width: 100%; min-height: 46px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 12px;
-      background: var(--field); color: var(--ink); font: inherit; font-weight: 400;
-      transition: border-color .15s, box-shadow .15s;
+    label { display: grid; gap: 7px; }
+    label > span:first-child { font: 500 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--label); }
+    input:not([type=file]), select {
+      width: 100%; height: 46px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--field); color: var(--text);
+      font: 500 16px/1 var(--sans); caret-color: var(--text); transition: border-color .15s, box-shadow .15s, background-color .2s var(--ease);
     }
-    textarea { min-height: 76px; resize: vertical; }
-    input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
-    input:focus, select:focus, textarea:focus { outline: 3px solid color-mix(in srgb, var(--green) 25%, transparent); outline-offset: 0; border-color: var(--green); }
-    ::placeholder { color: var(--muted); opacity: 1; }
+    input[name=pin], input[name=mobile], input[type=date], #google-client { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+    input:hover, select:hover { border-color: var(--label); }
+    .ctl { position: relative; display: block; }
+    .ctl select { appearance: none; padding-right: 42px; cursor: pointer; }
+    .ctl .chev { position: absolute; top: 50%; right: 14px; width: 18px; height: 18px; color: var(--text); transform: translateY(-50%); pointer-events: none; }
+    /* The native picker stays clickable but invisible under the drawn calendar icon. */
+    .ctl input[type=date]::-webkit-calendar-picker-indicator { position: absolute; right: 0; width: 46px; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .add .ctl { flex: 1; }
+    input:focus, select:focus { outline: none; border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+    ::placeholder { color: var(--label); opacity: 1; }
+    label.lit input, label.lit select { border-color: #0B0D10; background: var(--alert); color: #0B0D10; }
+    label.lit > span:first-child::after { content: "Updated"; margin-left: 8px; padding: 2px 6px; border-radius: 2px; background: #0B0D10; color: #FFD400; }
+    .hint { margin: 0; color: var(--label); font-size: 14px; }
+    .hint:empty { display: none; }
+    .hint.error { color: var(--danger); }
+    .hint.saved { color: var(--text); }
 
-    .uploads { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: start; }
-    .drop { display: grid; gap: 10px; cursor: pointer; }
-    .frame {
-      position: relative; display: grid; place-items: center; overflow: hidden; border: 1.5px dashed color-mix(in srgb, var(--green) 30%, var(--line));
-      border-radius: 16px; background: var(--surface); color: var(--muted); text-align: center;
-      transition: border-color .2s, background .2s, transform .3s var(--ease);
-    }
+    /* Photo and signature */
+    .uploads { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; }
+    .drop { display: grid; gap: 8px; cursor: pointer; }
+    .drop-label { display: flex; justify-content: space-between; font: 500 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--label); }
+    .drop-label [data-for] { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+    .frame { position: relative; display: grid; place-items: center; overflow: hidden; border: 1px dashed var(--label); border-radius: 2px; background: var(--surface); text-align: center; transition: border-color .15s; }
     .photo .frame { aspect-ratio: 3.5 / 4.5; }
     .signature .frame { aspect-ratio: 16 / 9; }
-    .drop:hover .frame { border-color: var(--green); background: color-mix(in srgb, var(--green-soft) 50%, var(--surface)); }
-    .drop:focus-within .frame { border-color: var(--green); outline: 3px solid color-mix(in srgb, var(--green) 25%, transparent); }
+    .drop:hover .frame { border-color: var(--text); }
+    .drop:focus-within .frame { outline: 2px solid var(--alert); outline-offset: 2px; }
     .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #fff; }
-    .signature .frame img { object-fit: contain; padding: 12px; }
-    .frame:has(img:not([hidden])) { border-style: solid; border-color: var(--line); }
-    .empty { display: grid; justify-items: center; gap: 6px; padding: 16px; font-size: 13px; font-weight: 400; }
-    .empty .i { width: 26px; height: 26px; color: var(--green); }
-    .empty b { color: var(--ink); font-weight: 600; }
-    .drop-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; }
-    .drop-label span { color: var(--green); font-weight: 600; }
+    .signature .frame img { padding: 12px; object-fit: contain; }
+    .frame:has(img:not([hidden])) { border-style: solid; border-color: var(--rule); }
+    .empty { display: grid; justify-items: center; gap: 6px; padding: 16px; color: var(--label); font-size: 13px; }
+    .empty b { color: var(--text); font-weight: 600; }
+    .empty .i { width: 24px; height: 24px; color: var(--text); }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-    .redirect { display: flex; gap: 8px; align-items: stretch; }
-    .redirect code {
-      flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
-      font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere;
-    }
-    .hint { margin: 0; color: var(--muted); font-size: 13.5px; font-weight: 400; }
+    /* Square status tags */
+    .sec-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+    .status-tag { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 2px; color: var(--label); font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .status-tag.ready { border-color: var(--text); background: var(--text); color: var(--ground); }
+    .status-tag .i { width: 13px; height: 13px; }
 
+    /* Khali Locker */
+    .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
+    .help { padding: 14px 16px; border: 1px solid var(--rule); border-radius: 2px; background: var(--surface); font-size: 14px; }
+    .help summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; font-weight: 600; }
+    .help summary::-webkit-details-marker { display: none; }
+    .help summary .chev { transition: transform .2s var(--ease); }
+    .help[open] summary .chev { transform: rotate(90deg); }
+    .help ol { display: grid; gap: 10px; margin: 12px 0 4px; padding-left: 20px; color: var(--label); }
+    .help b { color: var(--text); }
+    .help a { color: var(--text); text-underline-offset: 3px; }
+    .redirect { display: flex; gap: 8px; margin-top: 8px; }
+    .redirect code { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--field); color: var(--text); font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
+    .account { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--surface); }
+    .account .avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 2px; background: var(--text); color: var(--ground); font: 800 18px/1 var(--sans); font-stretch: 70%; }
+    .account div { flex: 1; min-width: 0; }
+    .account small { display: block; overflow: hidden; color: var(--label); font: 12px/1.4 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .docs { margin: 0; padding: 0; list-style: none; border-radius: 2px; background: var(--slate); color: var(--on-slate); }
+    .docs::before { content: "Document · file · size · added"; display: block; padding: 12px 16px; border-bottom: 1px solid var(--slate-line); color: var(--slate-label); font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .docs li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--slate-line); }
+    .docs li:last-child { border-bottom: 0; }
+    .docs li.none { display: block; padding: 22px 16px; color: var(--slate-label); font-size: 14px; }
+    .doc-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--slate-line); border-radius: 2px; }
+    .docs b { display: block; font: 700 16px/1.2 var(--sans); font-stretch: 80%; letter-spacing: .02em; text-transform: uppercase; }
+    .docs small { display: block; overflow: hidden; color: var(--slate-label); font: 12px/1.5 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .docs a, .docs button { padding: 8px 10px; border: 1px solid var(--slate-line); border-radius: 2px; background: none; color: var(--on-slate); font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; cursor: pointer; }
+    .docs a:hover, .docs button:hover { border-color: var(--on-slate); }
+    .add { display: flex; gap: 10px; }
+
+    /* Buttons */
     .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px;
-      border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
-      font: inherit; font-weight: 600; cursor: pointer; transition: background .15s, transform .2s var(--ease);
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px; border: 1px solid var(--text); border-radius: 2px;
+      background: transparent; color: var(--text); font: 700 13px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+      transition: background-color .15s, color .15s, box-shadow .15s, transform .2s var(--ease);
     }
-    .btn:hover { background: var(--bg); }
-    .btn:active { transform: scale(.98); }
-    .btn.primary {
-      border-color: transparent; background: var(--fill); color: #fff;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px var(--lift), 0 6px 16px -6px var(--lift);
-    }
-    .btn.primary:hover { background: var(--fill-hover); }
-    :focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
-    .sr-only:focus-visible { outline: none; }
+    .btn:hover { background: var(--text); color: var(--ground); }
+    .btn.primary { border-color: var(--button); background: var(--button); color: var(--on-button); }
+    .btn.primary:hover { box-shadow: inset 0 -3px 0 var(--alert); }
+    .btn:active, .btn.primary:active { border-color: var(--alert); background: var(--alert); color: #0B0D10; transform: translateY(1px); }
+    .btn:disabled { opacity: .45; cursor: progress; }
+    .add .btn:focus-within { outline: 2px solid var(--alert); outline-offset: 2px; }
 
-    .savebar {
-      position: fixed; inset: auto 0 0 0; border-top: 1px solid var(--line);
-      background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px);
-    }
-    .savebar-inner { display: flex; align-items: center; justify-content: flex-end; gap: 16px; max-width: 920px; margin: 0 auto; padding: 12px 24px; }
-    #status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
-    #status.saved { color: var(--green); }
-    #status.error { color: #b42318; }
+    /* Save bar */
+    .savebar { position: fixed; inset: auto 0 0 0; border-top: 1px solid var(--rule); background: var(--surface); }
+    .savebar-inner { display: flex; align-items: center; justify-content: flex-end; gap: 18px; max-width: 1280px; margin: 0 auto; padding: 12px 32px; }
+    #status { display: inline-flex; align-items: center; gap: 6px; color: var(--label); font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    #status.saved { color: var(--text); }
+    #status.error { color: var(--danger); font: 400 14px/1.4 var(--sans); letter-spacing: 0; text-transform: none; }
 
-    @media (max-width: 760px) {
-      .masthead-inner { flex-wrap: wrap; padding: 22px 16px; }
-      .private { margin-left: 0; }
-      main { padding: 0 16px 120px; }
-      section { grid-template-columns: 1fr; gap: 18px; padding: 28px 0; }
+    @media (max-width: 1040px) {
+      .layout { grid-template-columns: 1fr; gap: 32px; padding: 24px 20px 120px; }
+      .doc { position: static; max-width: 560px; }
+      .topbar-in { padding: 0 20px; }
+      .tagline { display: none; }
+    }
+    @media (max-width: 600px) {
+      .layout { padding: 16px 16px 120px; }
       .fields, .uploads { grid-template-columns: 1fr; }
       .uploads .photo { max-width: 200px; }
+      .private { gap: 6px; font-size: 10px; letter-spacing: 0; white-space: nowrap; }
       .savebar-inner { padding: 12px 16px; }
+      h2 { font-size: 26px; }
+      .seg.name b { font-size: 34px; }
+    }
+    @media (max-width: 480px) {
+      /* Mobile and state get the full row so numbers and names stay on one line. */
+      .row3 { grid-template-columns: 1fr 1fr; }
+      .row3 .seg:nth-child(3) { grid-column: 1 / -1; padding-left: 20px; border-top: 1px solid var(--line); border-left: 0; }
     }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   </style>
 </head>
 <body>
-<header class="masthead">
-  <div class="masthead-inner">
-    <span class="tile">S</span>
-    <div>
-      <h1>Seva</h1>
-      <p>One profile. Every form.</p>
-    </div>
+<header class="topbar">
+  <div class="topbar-in">
+    <span class="mark" aria-hidden="true">K</span>
+    <span class="wordmark">KHALI</span>
+    <span class="tagline">One profile. Every form.</span>
     <span class="private">
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/></svg>
-      Stored only in this browser
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="1"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/></svg>
+      <span>Stored only in this browser</span>
     </span>
   </div>
 </header>
 
-<main>
-  <form id="f">
-    <section>
-      <div class="sec-head">
+<div class="layout">
+  <aside class="doc" aria-label="Your profile at a glance">
+    <div class="doc-head"><span class="label">Profile</span><span class="count" id="doc-count"></span></div>
+    <div class="strip" id="doc-strip" role="img"></div>
+    <hr class="tear">
+    <button type="button" class="seg name" data-k="name"><span class="label">Full name</span><b></b></button>
+    <div class="row3">
+      <button type="button" class="seg" data-k="dob"><span class="label">Born</span><b class="num"></b></button>
+      <button type="button" class="seg" data-k="gender"><span class="label">Gender</span><b></b></button>
+      <button type="button" class="seg" data-k="mobile"><span class="label">Mobile</span><b class="num"></b></button>
+    </div>
+    <button type="button" class="seg" data-k="address"><span class="label">Address</span><b></b></button>
+    <div class="row3">
+      <button type="button" class="seg" data-k="pin"><span class="label">PIN</span><b class="num"></b></button>
+      <button type="button" class="seg" data-k="district"><span class="label">District</span><b></b></button>
+      <button type="button" class="seg" data-k="state"><span class="label">State</span><b></b></button>
+    </div>
+    <button type="button" class="seg" data-k="email"><span class="label">Email</span><b class="num"></b></button>
+    <div class="thumbs">
+      <button type="button" class="seg" data-k="photo"><span class="label">Photo</span><span class="thumb" id="doc-photo"></span></button>
+      <button type="button" class="seg" data-k="signature"><span class="label">Signature</span><span class="thumb" id="doc-signature"></span></button>
+    </div>
+  </aside>
+
+  <main>
+    <form id="f">
+      <section id="details">
         <h2>Your details</h2>
-        <p>Seva offers these on government forms and fills them only after you approve.</p>
-      </div>
-      <div class="fields">
-        <label class="wide">Full name <input name="name" autocomplete="name" placeholder="As on your Aadhaar"></label>
-        <label>Date of birth <input name="dob" type="date" autocomplete="bday"></label>
-        <label>Gender
-          <select name="gender">
-            <option value="">Select</option><option>Male</option><option>Female</option><option>Transgender</option>
-          </select>
-        </label>
-        <label class="wide">Residential address <textarea name="address" rows="2" autocomplete="street-address" placeholder="House, street, city, state, PIN"></textarea></label>
-        <label>Mobile number <input name="mobile" type="tel" autocomplete="tel" placeholder="98450 12345"></label>
-        <label>Email address <input name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
-      </div>
-    </section>
+        <p class="lede">Khali offers these on government forms and fills them only after you approve.</p>
+        <div class="fields">
+          <label class="wide"><span>Full name</span><input name="name" autocomplete="name" placeholder="As on your Aadhaar"></label>
+          <label><span>Date of birth</span><span class="ctl"><input name="dob" type="date" autocomplete="bday"><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="1"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span></label>
+          <label><span>Gender</span>
+            <span class="ctl"><select name="gender"><option value="">Select</option><option>Male</option><option>Female</option><option>Transgender</option></select><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+          </label>
+          <label><span>Mobile number</span><input name="mobile" type="tel" autocomplete="tel" placeholder="98450 12345"></label>
+          <label><span>Email address</span><input name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+        </div>
+      </section>
 
-    <section>
-      <div class="sec-head">
+      <section id="address">
+        <h2>Address</h2>
+        <p class="lede">Type your PIN and Khali fills in the district and state. Forms with a single address box get the whole address on one line.</p>
+        <div class="fields">
+          <label class="wide"><span>House / flat / building</span><input name="line1" autocomplete="address-line1" placeholder="Flat 4B, Shanti Apartments"></label>
+          <label class="wide"><span>Street / area / locality</span><input name="line2" autocomplete="address-line2" placeholder="42 MG Road, Shivajinagar"></label>
+          <label><span>PIN code</span><input name="pin" inputmode="numeric" maxlength="6" pattern="[1-9][0-9]{5}" title="6-digit PIN code" autocomplete="postal-code" placeholder="560001"></label>
+          <label><span>Village / town / city</span><input name="city" autocomplete="address-level2" placeholder="Bengaluru"></label>
+          <label><span>State</span><span class="ctl"><select name="state"><option value="">Select</option></select><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></label>
+          <label><span>District</span><input name="district" list="district-list" autocomplete="off" placeholder="Bengaluru Urban"></label>
+          <datalist id="district-list"></datalist>
+          <p class="hint wide" id="pin-hint" role="status"></p>
+        </div>
+      </section>
+
+      <section id="photos">
         <h2>Photo and signature</h2>
-        <p>Add them once. Seva crops and compresses a copy to each form's size rules when you attach it.</p>
-      </div>
-      <div class="uploads">
-        <label class="drop photo">
-          <span class="drop-label">Passport-size photo <span data-for="photo">Add</span></span>
-          <span class="frame">
-            <span class="empty">
-              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/></svg>
-              <b>Choose a photo</b>Plain background, face centred
+        <p class="lede">Add them once. Khali crops and compresses a copy to each form's size rules when you attach it.</p>
+        <div class="uploads">
+          <label class="drop photo">
+            <span class="drop-label">Photo <span data-for="photo">Add</span></span>
+            <span class="frame">
+              <span class="empty">
+                <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="1"/><circle cx="12" cy="10" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/></svg>
+                <b>Choose a photo</b>Passport-size, plain background
+              </span>
+              <img id="photo-preview" alt="Your saved photo" hidden>
             </span>
-            <img id="photo-preview" alt="Your saved photo" hidden>
-          </span>
-          <input class="sr-only" name="photo" type="file" accept="image/jpeg,image/png,image/webp">
-        </label>
-        <label class="drop signature">
-          <span class="drop-label">Signature <span data-for="signature">Add</span></span>
-          <span class="frame">
-            <span class="empty">
-              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16c2.5 0 3.5-8 6-8s1 7 3 7 2.5-3 4-3 1.5 2 5 2"/><path d="M3 20.5h18"/></svg>
-              <b>Choose a signature</b>Dark ink on white paper
+            <input class="sr-only" name="photo" type="file" accept="image/jpeg,image/png,image/webp">
+          </label>
+          <label class="drop signature">
+            <span class="drop-label">Signature <span data-for="signature">Add</span></span>
+            <span class="frame">
+              <span class="empty">
+                <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16c2.5 0 3.5-8 6-8s1 7 3 7 2.5-3 4-3 1.5 2 5 2"/><path d="M3 20.5h18"/></svg>
+                <b>Choose a signature</b>Dark ink on white paper
+              </span>
+              <img id="signature-preview" alt="Your saved signature" hidden>
             </span>
-            <img id="signature-preview" alt="Your saved signature" hidden>
-          </span>
-          <input class="sr-only" name="signature" type="file" accept="image/jpeg,image/png,image/webp">
-        </label>
-      </div>
-    </section>
+            <input class="sr-only" name="signature" type="file" accept="image/jpeg,image/png,image/webp">
+          </label>
+        </div>
+      </section>
 
-    <section>
-      <div class="sec-head">
-        <h2>DigiLocker</h2>
-        <p>Fetching your real Aadhaar needs partner credentials from API Setu. Without them, Seva attaches a sample PDF so you can try the flow.</p>
-        <span class="status-pill" id="dl-status">
-          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/></svg>
-          <span>Demo mode</span>
-        </span>
-      </div>
-      <div class="fields">
-        <label>Client ID <input name="clientId" autocomplete="off" spellcheck="false"></label>
-        <label>Client secret <input name="clientSecret" type="password" autocomplete="off"></label>
-        <div class="wide" style="display: grid; gap: 6px;">
-          <span style="font-size: 13.5px; font-weight: 600;">Redirect URI</span>
-          <div class="redirect"><code id="redirect"></code><button class="btn" type="button" id="copy">Copy</button></div>
-          <p class="hint">Register this exact URI with DigiLocker when you create your client.</p>
+      <section id="locker">
+        <div class="sec-top"><h2>Khali Locker</h2><span class="status-tag" id="drive-status"></span></div>
+        <p class="lede">Your documents, kept in a “Khali Locker” folder in your own Google Drive. Khali attaches the right one when a form asks.</p>
+        <div class="stack">
+          <div id="drive-setup" class="stack">
+            <label><span>Google OAuth client ID</span><input id="google-client" autocomplete="off" spellcheck="false" placeholder="1234567890-abc.apps.googleusercontent.com"></label>
+            <details class="help">
+              <summary><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>How to get a client ID (about 5 minutes)</summary>
+              <ol>
+                <li>Create a project in the <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a>.</li>
+                <li>Turn on the <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Drive API</a> for it.</li>
+                <li>Set up the OAuth consent screen as <b>External</b> and add your own Google account as a test user.</li>
+                <li>Create an OAuth client ID of type <b>Web application</b> with this authorised redirect URI:
+                  <div class="redirect"><code class="redirect-uri"></code><button class="btn" type="button" data-copy>Copy</button></div>
+                </li>
+                <li>Paste the client ID above and connect.</li>
+              </ol>
+            </details>
+            <div><button class="btn primary" type="button" id="drive-connect">Connect Google Drive</button></div>
+          </div>
+          <div id="drive-ready" class="stack" hidden>
+            <div class="account">
+              <span class="avatar" id="drive-initial"></span>
+              <div><b id="drive-name"></b><small id="drive-email"></small></div>
+              <button class="btn" type="button" id="drive-disconnect">Disconnect</button>
+            </div>
+            <ul class="docs" id="docs"></ul>
+            <div class="add">
+              <span class="ctl"><select id="doc-kind" aria-label="Document type"></select><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+              <label class="btn primary">Add document<input class="sr-only" type="file" id="doc-file" accept="application/pdf,image/jpeg,image/png"></label>
+            </div>
+          </div>
+          <p class="hint" id="locker-msg" role="status"></p>
+        </div>
+      </section>
+
+      <section id="digilocker">
+        <div class="sec-top"><h2>DigiLocker</h2><span class="status-tag" id="dl-status"></span></div>
+        <p class="lede">Fetching your real Aadhaar needs partner credentials from API Setu. Without them, Khali attaches a sample PDF so you can try the flow.</p>
+        <div class="fields">
+          <label><span>Client ID</span><input name="clientId" autocomplete="off" spellcheck="false"></label>
+          <label><span>Client secret</span><input name="clientSecret" type="password" autocomplete="off"></label>
+          <div class="wide">
+            <span class="label">Redirect URI</span>
+            <div class="redirect"><code class="redirect-uri"></code><button class="btn" type="button" data-copy>Copy</button></div>
+            <p class="hint" style="margin-top: 8px">Register this exact URI with DigiLocker when you create your client.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="savebar">
+        <div class="savebar-inner">
+          <span id="status" role="status"></span>
+          <button class="btn primary">Save changes</button>
         </div>
       </div>
-    </section>
-
-    <div class="savebar">
-      <div class="savebar-inner">
-        <span id="status" role="status"></span>
-        <button class="btn primary">Save changes</button>
-      </div>
-    </div>
-  </form>
-</main>
+    </form>
+  </main>
+</div>
+<script src="kinds.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

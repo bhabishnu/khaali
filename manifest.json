@@ -1,27 +1,62 @@
 {
   "manifest_version": 3,
-  "name": "Seva",
+  "name": "Khali",
   "version": "0.1.0",
-  "description": "Autofill government forms from your saved profile and attach your Aadhaar from DigiLocker.",
-  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
-  "permissions": ["storage", "identity"],
-  "host_permissions": ["https://api.digitallocker.gov.in/*"],
-  "background": { "service_worker": "background.js" },
+  "description": "Autofill government forms from your saved profile and attach documents from DigiLocker or your Google Drive.",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "permissions": [
+    "storage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://api.digitallocker.gov.in/*",
+    "https://www.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["*://*.gov.in/*", "*://*.nic.in/*", "https://docs.google.com/forms/*", "http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["content.js"]
+      "matches": [
+        "*://*.gov.in/*",
+        "*://*.nic.in/*",
+        "https://docs.google.com/forms/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "kinds.js",
+        "content.js"
+      ]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["fonts/anek-latin.woff2"],
-      "matches": ["*://*.gov.in/*", "*://*.nic.in/*", "https://docs.google.com/*", "http://localhost/*", "http://127.0.0.1/*"]
+      "resources": [
+        "fonts/archivo.woff2",
+        "fonts/martian-mono.woff2"
+      ],
+      "matches": [
+        "*://*.gov.in/*",
+        "*://*.nic.in/*",
+        "https://docs.google.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ]
     }
   ],
   "action": {
-    "default_title": "Seva",
-    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+    "default_title": "Khali",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
   },
   "options_page": "options.html"
 }

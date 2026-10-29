@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Seva test form</title>
-  <!-- Local test page for Seva. Serve it on localhost: python3 -m http.server 8000 (from the repo root). -->
+  <title>Khali test form</title>
+  <!-- Local test page for Khali. Serve it on localhost: python3 -m http.server 8000 (from the repo root). -->
   <style>
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f3f5f7; color: #1d2733; }
     .bar { background: #24489a; color: #fff; padding: 14px 24px; font-weight: 700; }
@@ -12,7 +12,7 @@
     section { background: #fff; border-radius: 10px; padding: 20px; }
     section[hidden] { display: none; }
     .grid { display: grid; grid-template-columns: 180px 1fr; gap: 12px 16px; align-items: center; }
-    input:not([type=radio]), textarea { font: inherit; padding: 8px; border: 1px solid #c9d1da; border-radius: 6px; }
+    input:not([type=radio]), select, textarea { font: inherit; padding: 8px; border: 1px solid #c9d1da; border-radius: 6px; }
     .actions { margin-top: 20px; display: flex; gap: 8px; }
     button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid #24489a; background: #24489a; color: #fff; cursor: pointer; }
     button.back { background: #fff; color: #24489a; }
@@ -37,7 +37,15 @@
           <label><input type="radio" name="gender" value="F"> Female</label>
           <label><input type="radio" name="gender" value="T"> Transgender</label>
         </span>
-        <label for="addr">Residential address *</label><textarea id="addr" name="addr" rows="2"></textarea>
+        <label for="addr">Address (house, street, village/town) *</label><textarea id="addr" name="addr" rows="2"></textarea>
+        <label for="txtPinCode">PIN code *</label><input id="txtPinCode" name="txtPinCode" maxlength="6">
+        <label for="ddlState">State *</label>
+        <select id="ddlState" name="ddlState">
+          <option value="">-- Select State --</option>
+          <option value="21">ORISSA</option><option value="29">KARNATAKA</option><option value="32">KERALA</option><option value="07">NCT OF DELHI</option>
+        </select>
+        <label for="ddlDistrict">District *</label>
+        <select id="ddlDistrict" name="ddlDistrict" disabled><option value="">-- Select District --</option></select>
         <label for="mob">Mobile number *</label><input id="mob" name="mob" maxlength="10">
         <label for="mail">Email address *</label><input id="mail" name="mail" type="email">
       </div>
@@ -48,6 +56,7 @@
       <h2>2. Upload supporting documents</h2>
       <div class="grid">
         <label for="idProof">Identity proof * (Aadhaar / Passport)</label><input id="idProof" name="idProof" type="file" accept=".pdf,.jpg,.png">
+        <label for="pan">PAN card * (PDF)</label><input id="pan" name="pan" type="file" accept=".pdf">
         <label for="addrProof">Address proof * (utility bill)</label><input id="addrProof" name="addrProof" type="file" accept=".pdf,.jpg,.png">
         <label for="photo">Photograph * (JPG, 3.5 cm × 4.5 cm, 20–50 KB)</label><input id="photo" name="photo" type="file" accept=".jpg,.jpeg">
         <label for="sign">Signature * (JPG, 10–20 KB)</label><input id="sign" name="sign" type="file" accept=".jpg,.jpeg">
@@ -65,6 +74,21 @@
 </main>
 <script>
   const form = document.getElementById('app');
+
+  // Like an ASP.NET UpdatePanel: districts arrive a moment after the state is picked, as a brand-new <select>.
+  const DISTRICTS = { 21: ['CUTTACK', 'KHURDA'], 29: ['BAGALKOTE', 'BANGALORE RURAL', 'BANGALORE URBAN', 'MYSORE'],
+    32: ['ERNAKULAM', 'KOZHIKODE'], '07': ['CENTRAL', 'NEW DELHI'] };
+  document.getElementById('ddlState').addEventListener('change', e => {
+    const old = document.getElementById('ddlDistrict');
+    old.disabled = true;
+    setTimeout(() => {
+      const sel = old.cloneNode(false);
+      sel.disabled = !e.target.value;
+      sel.innerHTML = '<option value="">-- Select District --</option>' +
+        (DISTRICTS[e.target.value] || []).map((d, i) => `<option value="${e.target.value}${i}">${d}</option>`).join('');
+      document.getElementById('ddlDistrict').replaceWith(sel);
+    }, 700);
+  });
   form.addEventListener('click', e => {
     const go = e.target.dataset.go;
     if (!go) return;

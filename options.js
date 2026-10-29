@@ -1,19 +1,22 @@
 const form = document.getElementById('f');
 const status = document.getElementById('status');
-const PROFILE = ['name', 'dob', 'gender', 'address', 'mobile', 'email'];
+const PROFILE = ['name', 'dob', 'gender', 'line1', 'line2', 'pin', 'city', 'state', 'district', 'mobile', 'email'];
 const IMAGES = ['photo', 'signature'];
 const svg = path => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
 const CHECK = svg('<path d="M20 6 9 17l-5-5"/>');
 const ALERT = svg('<path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>');
 
 const redirect = chrome.identity.getRedirectURL();
-document.getElementById('redirect').textContent = redirect;
+for (const el of document.querySelectorAll('.redirect-uri')) el.textContent = redirect;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const send = msg => chrome.runtime.sendMessage(msg);
 
 function preview(kind, url) {
   const img = document.getElementById(`${kind}-preview`);
   img.src = url || '';
   img.hidden = !url;
   document.querySelector(`[data-for="${kind}"]`).textContent = url ? 'Replace' : 'Add';
+  renderDoc();
 }
 
 function digilockerStatus(clientId) {
@@ -27,8 +30,39 @@ function say(text, tone = '') {
   status.innerHTML = tone === 'saved' ? `${CHECK}<span>${text}</span>` : text;
 }
 
-chrome.storage.local.get(['profile', 'clientId', 'clientSecret', ...IMAGES]).then(({ profile = {}, photo, signature, ...digilocker }) => {
-  for (const [k, v] of Object.entries({ ...profile, ...digilocker })) form.elements[k].value = v;
+// India Post's PIN directory, bundled so the lookup never leaves this computer.
+const places = fetch('data/pins.json').then(r => r.json());
+const pinHint = document.getElementById('pin-hint');
+
+async function districtList() {
+  const { states, districts } = await places;
+  const si = states.indexOf(form.elements.state.value);
+  document.getElementById('district-list').innerHTML = districts.filter(d => d[1] === si).map(d => `<option value="${esc(d[0])}">`).join('');
+}
+form.elements.state.addEventListener('change', districtList);
+
+form.elements.pin.addEventListener('input', async e => {
+  const pin = e.target.value.replace(/\D/g, '');
+  pinHint.textContent = '';
+  if (pin.length !== 6) return;
+  const { states, districts, pins } = await places;
+  if (pins[pin] === undefined) return (pinHint.textContent = 'Khali doesn’t know this PIN. Check it, or pick the district and state yourself.');
+  const [district, si] = districts[pins[pin]];
+  form.elements.state.value = states[si];
+  form.elements.district.value = district;
+  districtList();
+  light('district', 'state');
+  pinHint.textContent = `District and state filled in from PIN ${pin}.`;
+});
+
+Promise.all([places, chrome.storage.local.get(['profile', 'clientId', 'clientSecret', ...IMAGES])]).then(([{ states }, saved]) => {
+  const { profile = {}, photo, signature, ...digilocker } = saved;
+  form.elements.state.insertAdjacentHTML('beforeend', states.map(s => `<option>${esc(s)}</option>`).join(''));
+  // Older profiles kept the address in one box; it moves into the first line until you split it up.
+  if (profile.address && !profile.line1) profile.line1 = profile.address;
+  for (const [k, v] of Object.entries({ ...profile, ...digilocker })) if (form.elements[k]) form.elements[k].value = v;
+  districtList();
+  renderDoc();
   preview('photo', photo);
   preview('signature', signature);
   digilockerStatus(digilocker.clientId);
@@ -40,13 +74,18 @@ for (const kind of IMAGES) {
     if (file) preview(kind, URL.createObjectURL(file));
   });
 }
-form.addEventListener('input', () => say('Unsaved changes'));
+// The locker saves as you go, so its inputs don't count as unsaved profile changes.
+form.addEventListener('input', e => e.target.closest('#locker') || say('Unsaved changes'));
+form.addEventListener('input', () => renderDoc());
+form.addEventListener('change', () => renderDoc());
 
-document.getElementById('copy').addEventListener('click', async e => {
-  await navigator.clipboard.writeText(redirect);
-  e.target.textContent = 'Copied';
-  setTimeout(() => (e.target.textContent = 'Copy'), 1500);
-});
+for (const btn of document.querySelectorAll('[data-copy]')) {
+  btn.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(redirect);
+    btn.textContent = 'Copied';
+    setTimeout(() => (btn.textContent = 'Copy'), 1500);
+  });
+}
 
 // Phone photos run to several MB; keep a 1600px JPEG master so storage stays small. Forms get their own size later.
 async function shrink(file) {
@@ -79,7 +118,7 @@ form.addEventListener('submit', async e => {
     }
   }
   await chrome.storage.local.set({
-    profile: Object.fromEntries(PROFILE.map(k => [k, data[k].trim()])),
+    profile: Object.fromEntries(PROFILE.map(k => [k, data[k].trim()])), // drops the old single-box address
     clientId: data.clientId.trim(),
     clientSecret: data.clientSecret.trim(),
     ...images,
@@ -87,5 +126,150 @@ form.addEventListener('submit', async e => {
   await chrome.storage.session.remove('token'); // credentials may have changed
   for (const kind of IMAGES) form.elements[kind].value = '';
   digilockerStatus(data.clientId.trim());
+  lit.clear();
+  renderDoc();
   say('Saved', 'saved');
+});
+
+// ---------- Khali Locker (Google Drive) ----------
+const LOCKER_KINDS = FILES.filter(f => f.locker);
+const FILE_ICON = svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
+const $ = id => document.getElementById(id);
+const kindLabel = kind => LOCKER_KINDS.find(k => k.kind === kind)?.label || kind;
+const size = n => n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const day = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+$('doc-kind').innerHTML = LOCKER_KINDS.map(k => `<option value="${k.kind}">${k.label}</option>`).join('');
+
+function lockerSay(text, tone = '') {
+  $('locker-msg').className = `hint ${tone}`;
+  $('locker-msg').textContent = text;
+}
+
+function renderDrive({ driveUser, locker = [] }) {
+  $('drive-setup').hidden = !!driveUser;
+  $('drive-ready').hidden = !driveUser;
+  $('drive-status').classList.toggle('ready', !!driveUser);
+  $('drive-status').innerHTML = driveUser ? `${CHECK}<span>Connected</span>` : `${ALERT}<span>Not connected</span>`;
+  if (!driveUser) return;
+  $('drive-name').textContent = driveUser.name;
+  $('drive-email').textContent = driveUser.email;
+  $('drive-initial').textContent = (driveUser.name || driveUser.email)[0].toUpperCase();
+  $('docs').innerHTML = locker.length ? locker.map(d => `<li>
+      <span class="doc-icon">${FILE_ICON}</span>
+      <div><b>${esc(kindLabel(d.kind))}</b><small>${esc(d.name)} · ${size(d.size)} · ${day(d.modified)}</small></div>
+      <a href="${esc(d.link)}" target="_blank" rel="noopener">Open</a>
+      <button type="button" class="remove" data-remove="${esc(d.id)}" data-name="${esc(d.name)}">Remove</button>
+    </li>`).join('')
+    : '<li class="none">No documents yet. Add your Aadhaar, PAN or marksheets below.</li>';
+}
+
+const loadDrive = () => chrome.storage.local.get(['driveUser', 'locker']).then(renderDrive);
+chrome.storage.onChanged.addListener(changes => (changes.driveUser || changes.locker) && loadDrive());
+chrome.storage.local.get(['googleClientId', 'driveUser']).then(({ googleClientId = '', driveUser }) => {
+  $('google-client').value = googleClientId;
+  loadDrive();
+  // Refresh from Drive in case files changed elsewhere; stay quiet if Google needs a fresh sign-in.
+  if (driveUser) send({ type: 'lockerList', interactive: false });
+});
+
+$('drive-connect').addEventListener('click', async () => {
+  const clientId = $('google-client').value.trim();
+  if (!clientId.endsWith('.apps.googleusercontent.com')) {
+    return lockerSay('That doesn’t look like a Google client ID. It ends in .apps.googleusercontent.com.', 'error');
+  }
+  await chrome.storage.local.set({ googleClientId: clientId });
+  $('drive-connect').disabled = true;
+  lockerSay('Finish signing in on the Google window.');
+  const res = await send({ type: 'driveConnect' });
+  $('drive-connect').disabled = false;
+  lockerSay(res.error || '', res.error ? 'error' : '');
+});
+
+$('drive-disconnect').addEventListener('click', async () => {
+  await send({ type: 'driveDisconnect' });
+  lockerSay('Disconnected. Your documents are still in the Khali Locker folder in your Drive.');
+});
+
+$('doc-file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) return lockerSay('Use a PDF, JPG or PNG file.', 'error');
+  if (file.size > 10 * 1048576) return lockerSay('That file is over 10 MB. Government forms usually want much smaller files.', 'error');
+  lockerSay(`Uploading ${file.name} to your Drive…`);
+  const data = await new Promise(r => {
+    const fr = new FileReader();
+    fr.onload = () => r(fr.result.split(',')[1]);
+    fr.readAsDataURL(file);
+  });
+  const res = await send({ type: 'lockerUpload', kind: $('doc-kind').value, name: file.name, mime: file.type, data });
+  lockerSay(res.error || `${file.name} is in your Khali Locker.`, res.error ? 'error' : 'saved');
+});
+
+$('docs').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-remove]');
+  if (!btn || !confirm(`Move ${btn.dataset.name} to your Google Drive trash? You can restore it from there for 30 days.`)) return;
+  const res = await send({ type: 'lockerRemove', id: btn.dataset.remove });
+  if (res.error) lockerSay(res.error, 'error');
+});
+
+// ---------- The profile document (left column) ----------
+const DOC_FIELDS = ['name', 'dob', 'gender', 'line1', 'line2', 'city', 'district', 'state', 'pin', 'mobile', 'email', 'photo', 'signature'];
+const DOC_LABELS = {
+  name: 'Full name', dob: 'Date of birth', gender: 'Gender', line1: 'House / flat', line2: 'Street / area', city: 'Village / town / city',
+  district: 'District', state: 'State', pin: 'PIN code', mobile: 'Mobile number', email: 'Email address', photo: 'Photo', signature: 'Signature',
+};
+const docValue = k => (k === 'photo' || k === 'signature' ? (!$(`${k}-preview`).hidden ? 'saved' : '') : form.elements[k].value.trim());
+const born = iso => iso ? new Date(`${iso}T00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+// Barcode-style strip: one bar per detail, its stroke widths drawn from the value; a missing detail leaves a gap.
+const strokes = v => [0, 1, 2, 3].map(i => 1 + ((v.charCodeAt((i * 3) % v.length) + i) % 4));
+
+// Changes Khali makes for you (district and state from a PIN) stay lit until you look at them.
+const lit = new Set();
+const light = (...keys) => {
+  keys.forEach(k => lit.add(k));
+  renderDoc();
+};
+form.addEventListener('focusin', e => lit.delete(e.target.name) && renderDoc());
+
+function renderDoc() {
+  const vals = Object.fromEntries(DOC_FIELDS.map(k => [k, docValue(k)]));
+  const missing = DOC_FIELDS.filter(k => !vals[k]);
+  $('doc-count').textContent = `${DOC_FIELDS.length - missing.length} / ${DOC_FIELDS.length} ready`;
+  $('doc-strip').innerHTML = DOC_FIELDS.map(k => vals[k]
+    ? `<span class="bar" title="${DOC_LABELS[k]}">${strokes(vals[k]).map(w => `<i style="flex:${w}"></i>`).join('')}</span>`
+    : `<span class="bar gap" title="${DOC_LABELS[k]}: missing"></span>`).join('');
+  $('doc-strip').setAttribute('aria-label', missing.length
+    ? `${DOC_FIELDS.length - missing.length} of ${DOC_FIELDS.length} details ready. Missing: ${missing.map(k => DOC_LABELS[k]).join(', ')}.`
+    : 'Every detail is ready.');
+
+  const shown = {
+    name: vals.name, dob: born(vals.dob), gender: vals.gender, mobile: vals.mobile, email: vals.email,
+    address: [vals.line1, vals.line2, vals.city].filter(Boolean).join(', '), pin: vals.pin, district: vals.district, state: vals.state,
+  };
+  for (const [k, v] of Object.entries(shown)) {
+    const seg = document.querySelector(`.seg[data-k="${k}"]`);
+    const b = seg.querySelector('b');
+    b.textContent = v || 'Add';
+    if (lit.has(k)) b.insertAdjacentHTML('beforeend', '<span class="tag">Updated</span>');
+    seg.classList.toggle('missing', !v);
+    seg.classList.toggle('lit', lit.has(k));
+    seg.setAttribute('aria-label', `${seg.querySelector('.label').textContent}: ${v || 'not added'}. Edit`);
+  }
+  for (const k of ['district', 'state']) form.elements[k].closest('label').classList.toggle('lit', lit.has(k));
+  for (const k of ['photo', 'signature']) {
+    const src = vals[k] && $(`${k}-preview`).src;
+    $(`doc-${k}`).classList.toggle('filled', !!src);
+    $(`doc-${k}`).innerHTML = src ? `<img alt="" src="${esc(src)}">` : 'Add';
+  }
+}
+
+// Clicking a part of the document jumps to the field that edits it.
+document.querySelector('.doc').addEventListener('click', e => {
+  const k = e.target.closest('.seg')?.dataset.k;
+  if (!k) return;
+  const field = form.elements[k === 'address' ? 'line1' : k];
+  field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  field.focus({ preventScroll: true });
 });

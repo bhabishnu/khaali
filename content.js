@@ -1,34 +1,41 @@
-// Seva: spots profile fields and Aadhaar uploads on the page, fills them after the user approves.
+// Khali: spots profile fields and Aadhaar uploads on the page, fills them after the user approves.
 
-// Order matters, first match wins: "Email address" must not be taken as an address.
+// Order matters, first match wins: "Email address" is not an address, "Address line 1" is the house line,
+// and "Name of village" is a place, not a name.
 const FIELDS = [
   { key: 'email', label: 'Email address', ac: /email/, re: /e-?mail/i },
   { key: 'mobile', label: 'Mobile number', ac: /^tel/, re: /mobile|phone|contact\s*(no|num)|\bmob\b/i },
   { key: 'dob', label: 'Date of birth', ac: /^bday$/, re: /\bdob\b|d\.o\.b|date\s*of\s*birth|birth\s*date/i },
   { key: 'gender', label: 'Gender', ac: /^sex$/, re: /gender|\bsex\b/i },
-  { key: 'address', label: 'Residential address', ac: /address/, re: /address/i },
+  { key: 'pin', label: 'PIN code', ac: /postal-code/, re: /pin\s*code|\bpin\b|postal\s*code|\bzip\b|पिन/i,
+    not: /\bm-?pin\b|upi|login|password|secret|transaction/i },
+  { key: 'state', label: 'State', ac: /address-level1/, re: /\bstate\b|राज्य/i, not: /please\s+state|\bstate\s+(the|your|whether)\b/i },
+  { key: 'district', label: 'District', re: /district|\bdist\b|\bzila\b|जिला|ज़िला/i },
+  { key: 'city', label: 'Village / town / city', ac: /address-level2/, re: /\bcity\b|\btown\b|\bvillage\b|\bvill\b|शहर|गांव|गाँव/i },
+  { key: 'line1', label: 'House / flat', ac: /address-line1/,
+    re: /\bhouse\b|\bflat\b|\bbuilding\b|\bdoor\b|\bplot\b|premises|\bh\.?\s*no\b|address\s*line\s*1|\baddress\s*1\b/i },
+  { key: 'line2', label: 'Street / area', ac: /address-line2/,
+    re: /street|\broad\b|\blane\b|locality|colony|\bsector\b|\barea\b|address\s*line\s*2|\baddress\s*2\b/i },
+  { key: 'address', label: 'Residential address', ac: /street-address/, re: /address|पता/i },
   { key: 'name', label: 'Full name', ac: /^name$/, re: /name/i,
     not: /\b(user|login|first|middle|last|sur|given|family)\s*name|\b(company|organi[sz]ation|school|college|institut\w*|bank|branch|village|town|district|city|state|country|file)\b/i },
 ];
 const SOMEONE_ELSE = /father|mother|guardian|parent|spouse|husband|wife|nominee|witness|alternate/i;
-// Upload fields. Order matters: "Photo ID proof" is an identity document, not a photo.
-const FILES = [
-  { kind: 'aadhaar', re: /aadhaa?r|identity\s*proof|id\s*proof|proof\s*of\s*identity|\bpoi\b/i },
-  { kind: 'signature', label: 'Signature', re: /signature|\bsign\b|हस्ताक्षर/i, max: 20, side: 400 },
-  { kind: 'photo', label: 'Photo', re: /photo|picture|फोटो/i, max: 50, side: 600 },
-];
 
 let profile = {};
 let images = {}; // { photo, signature }: data URLs saved in settings
+let locker = []; // index of Khali Locker files on Google Drive, newest first
 let state = null; // 'open' while the panel waits on the user
-let pending = { fills: [], doc: null, images: [] };
+let pending = { fills: [], doc: null, locker: [], images: [] };
 let filled = 0, attached = 0;
+let settled = []; // rows from the last fill, kept in the finished panel
 const notes = [];
 const offered = new WeakSet();
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const norm = s => (s || '').trim().toLowerCase();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fromB64 = data => Uint8Array.from(atob(data), c => c.charCodeAt(0));
 
 const hint = el => [
   ...[...(el.labels || [])].map(l => l.textContent),
@@ -36,13 +43,22 @@ const hint = el => [
   el.getAttribute('aria-label'), el.placeholder, el.name, el.id, el.title,
   el.closest('tr')?.cells[0]?.textContent,
   el.closest('fieldset')?.querySelector('legend')?.textContent,
-].filter(Boolean).join(' ');
+].filter(Boolean).join(' ')
+  .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' '); // ids like ddlState or txt_pin_code read as words
+
+const PARTS = new Set(['pin', 'state', 'district', 'city', 'line1', 'line2']);
 
 function rule(el) {
   const h = hint(el);
   if (SOMEONE_ELSE.test(h)) return null;
-  const ac = el.getAttribute('autocomplete') || '';
-  return FIELDS.find(f => f.ac.test(ac)) || FIELDS.find(f => f.re.test(h) && !f.not?.test(h));
+  const byAc = FIELDS.find(f => f.ac?.test(el.getAttribute('autocomplete') || ''));
+  if (byAc) return byAc;
+  const f = FIELDS.find(f => f.re.test(h) && !f.not?.test(h));
+  // "Address (house, street, village/town)" names several parts, so it's one box for the whole address.
+  if (PARTS.has(f?.key) && /address|पता/i.test(h) && FIELDS.filter(x => PARTS.has(x.key) && x.re.test(h)).length > 1) {
+    return FIELDS.find(x => x.key === 'address');
+  }
+  return f;
 }
 
 const radios = el => [...document.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`)];
@@ -56,17 +72,33 @@ function isEmpty(el) {
   return !el.value.trim();
 }
 
+// Dropdowns that portals fill only after their parent is picked (state → district → city).
+const CASCADE = { state: 1, district: 2, city: 3 };
+
 function scan() {
   const found = [], groups = new Set();
   for (const el of document.querySelectorAll('input, select, textarea, [role=radiogroup]')) {
-    if (el.disabled || el.readOnly || !el.getClientRects().length) continue;
+    if (el.readOnly || !el.getClientRects().length) continue;
     if (/^(hidden|submit|button|reset|image|checkbox|password|file)$/.test(el.type)) continue;
     if (el.type === 'radio') { if (groups.has(el.name)) continue; groups.add(el.name); }
     const f = rule(el);
+    // A district or city dropdown is often disabled until a state is picked; Khali waits for it.
+    if (el.disabled && !(el.tagName === 'SELECT' && CASCADE[f?.key] > 1)) continue;
     if (f && isEmpty(el)) found.push({ el, f });
   }
   return found;
 }
+
+// The full address for single "Address" boxes. Parts the form asks for in their own fields are left out.
+function fullAddress(skip = new Set()) {
+  const parts = ['line1', 'line2', 'city', 'district', 'state'].filter(k => !skip.has(k)).map(k => profile[k]).filter(Boolean);
+  const pin = skip.has('pin') ? '' : profile.pin;
+  if (!['line1', 'line2', 'city', 'district', 'state', 'pin'].some(k => profile[k])) return profile.address || ''; // older profiles
+  return parts.join(', ') + (pin ? ` ${pin}` : '');
+}
+const asked = () => new Set(pending.fills.map(x => x.f.key));
+const val = key => (key === 'address' ? fullAddress(asked()) : profile[key]) || '';
+const has = key => !!(key === 'address' ? fullAddress() : profile[key]);
 
 // File inputs are often hidden behind a styled "Browse" button, so check that their container is on screen instead.
 const scanFiles = () => [...document.querySelectorAll('input[type=file]')]
@@ -111,7 +143,7 @@ const specText = s => [s.type === 'image/png' ? 'PNG' : 'JPG', s.w && `${s.w}×$
 
 const toBlob = dataUrl => {
   const [meta, b64] = dataUrl.split(',');
-  return new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: meta.slice(5, meta.indexOf(';')) });
+  return new Blob([fromB64(b64)], { type: meta.slice(5, meta.indexOf(';')) });
 };
 
 // Best quality that stays under the size cap. Portals disagree on KB = 1000 or 1024 bytes,
@@ -162,39 +194,93 @@ async function fitImage(dataUrl, spec) {
 // Gender options are often written as initials (M / F / T).
 const sameOption = (texts, v) => texts.some(t => norm(t) === norm(v) || norm(t) === norm(v)[0]);
 
+// Place names are spelt many ways: "BENGALURU URBAN", "Bangalore Urban", "NCT of Delhi", "Orissa".
+const RENAMED = [['orissa', 'odisha'], ['pondicherry', 'puducherry'], ['uttaranchal', 'uttarakhand'], ['bangalore', 'bengaluru'],
+  ['gurgaon', 'gurugram'], ['allahabad', 'prayagraj'], ['mysore', 'mysuru'], ['belgaum', 'belagavi'], ['gulbarga', 'kalaburagi'],
+  ['mangalore', 'mangaluru'], ['bombay', 'mumbai'], ['calcutta', 'kolkata'], ['madras', 'chennai'], ['trivandrum', 'thiruvananthapuram'],
+  ['poona', 'pune'], ['baroda', 'vadodara'], ['chattisgarh', 'chhattisgarh']];
+const placeKey = s => RENAMED.reduce((t, [a, b]) => t.replaceAll(a, b), norm(s).replace(/&/g, 'and').replace(/[^a-z]/g, ''));
+const pairs = s => new Set([...s].slice(1).map((c, i) => s[i] + c));
+const likeness = (a, b) => {
+  const A = pairs(a), B = pairs(b);
+  let n = 0;
+  for (const p of A) n += B.has(p);
+  return (2 * n) / (A.size + B.size || 1);
+};
+// Exact beats an option containing yours ("Delhi" in "NCT of Delhi"), which beats an option inside yours
+// ("Kamrup" inside "Kamrup Metro"), which beats a close spelling. Nothing below 0.8 counts.
+function bestPlace(opts, v) {
+  const want = placeKey(v);
+  if (!want) return null;
+  let best = null, top = 0.8;
+  for (const o of opts) {
+    const t = placeKey(o.text) || placeKey(o.value);
+    const near = 1 - Math.abs(t.length - want.length) / 100;
+    const score = t === want ? 4 : t.length > 3 && t.includes(want) ? 2 + near : t.length > 3 && want.includes(t) ? 1 + near
+      : likeness(t, want);
+    if (score >= top) [best, top] = [o, score];
+  }
+  return best;
+}
+
+// Some portals rebuild a dropdown when its parent changes, so find the new one by id or name.
+const live = el => el.isConnected ? el
+  : (el.id && document.getElementById(el.id)) || (el.name && document.querySelector(`${el.tagName}[name="${CSS.escape(el.name)}"]`)) || el;
+
+// Dependent dropdowns load their options after the parent is picked, so keep looking for a few seconds.
+async function pickOption(el, v, key) {
+  for (let i = 0; i < 40; i++) {
+    const sel = live(el);
+    const opts = [...sel.options].filter(o => o.value && !/^\W*(select|choose)\b/i.test(o.text.trim()));
+    const o = !sel.disabled && (CASCADE[key] ? bestPlace(opts, v) : opts.find(o => sameOption([o.value, o.text], v)));
+    if (o) return o;
+    if (!sel.disabled && opts.length && !(CASCADE[key] > 1)) return null; // a full list without a match won't change
+    await sleep(200);
+  }
+  return null;
+}
+
 function valueFor(el, key) {
-  const v = profile[key];
+  const v = val(key);
   if (key === 'mobile') return v.replace(/\D/g, '').slice(-10);
+  if (key === 'pin') return v.replace(/\D/g, '');
   if (key === 'dob' && el.type !== 'date') return v.split('-').reverse().join('/'); // DD/MM/YYYY
   return v;
 }
 
-function fill(el, key) {
+// Returns the element it filled (a rebuilt dropdown may be a new one), or null.
+async function fill(el, key) {
   const v = valueFor(el, key);
   if (isAriaGroup(el)) {
     const r = [...el.querySelectorAll('[role=radio]')]
       .find(r => sameOption([r.dataset.value, r.getAttribute('aria-label'), r.textContent], v));
     r?.click();
-    return !!r;
+    return r ? el : null;
   }
   if (el.type === 'radio') {
     const r = radios(el).find(r => sameOption([r.value, r.labels?.[0]?.textContent], v));
     r?.click();
-    return !!r;
+    return r ? el : null;
   }
   if (el.tagName === 'SELECT') {
-    const o = [...el.options].find(o => sameOption([o.value, o.text], v));
-    if (!o) return false;
+    const o = await pickOption(el, v, key);
+    if (!o) return null;
+    el = o.closest('select');
     el.value = o.value;
   } else {
     el.value = v;
   }
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
+  return el;
 }
 
 const ext = type => type.split('/')[1].replace('jpeg', 'jpg');
+
+// Does this <input type=file accept="..."> take the file? Accept lists MIME types, type/* or extensions.
+const accepts = (el, { type, name }) => !el.accept || el.accept.split(',').map(norm).some(a =>
+  a === type || (a.endsWith('/*') && type.startsWith(a.slice(0, -1)))
+  || norm(name).endsWith(a) || a === '.' + ext(type) || (a === '.jpeg' && type === 'image/jpeg'));
 
 function attach(input, file) {
   const dt = new DataTransfer();
@@ -211,7 +297,7 @@ const flash = el => {
 };
 
 function display(key) {
-  const v = profile[key];
+  const v = val(key);
   if (key === 'dob') return new Date(v + 'T00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   return v;
 }
@@ -221,13 +307,13 @@ function display(key) {
 const ICONS = {
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
   settings: '<path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
-  sparkles: '<path d="M11 3.5 12.8 8l4.7 1.8-4.7 1.8L11 16.2l-1.8-4.6-4.7-1.8L9.2 8z"/><path d="M18.5 14.5v5M16 17h5"/>',
+  form: '<rect x="4.5" y="3" width="15" height="18" rx="1"/><path d="M8 8h8M8 12h8M8 16h4"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   shield: '<path d="M12 21.5s7.5-3.6 7.5-9.4V5.6L12 2.8 4.5 5.6v6.5c0 5.8 7.5 9.4 7.5 9.4z"/><path d="m9 12 2.2 2.2 4.3-4.2"/>',
   file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
-  lock: '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/>',
+  lock: '<rect x="4.5" y="10.5" width="15" height="10.5" rx="1"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/>',
   alert: '<path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>',
-  photo: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/>',
+  photo: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><circle cx="12" cy="10" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/>',
   signature: '<path d="M3 16c2.5 0 3.5-8 6-8s1 7 3 7 2.5-3 4-3 1.5 2 5 2"/><path d="M3 20.5h18"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -237,100 +323,98 @@ const icon = name => `<svg class="i${name === 'spin' ? ' spin' : ''}" viewBox="0
 const title = (name, text, tone = '') => `<div class="title"><span class="badge ${tone}">${icon(name)}</span><h2>${text}</h2></div>`;
 const foot = (name, text) => `<p class="foot">${icon(name)}<span>${text}</span></p>`;
 
-// Bundled typeface, added to the page's font set as bytes. If that fails, the panel uses the system font.
+// Bundled typefaces, added to the page's font set as bytes. If that fails, the panel uses the system font.
 let fontReady;
-const loadFont = () => fontReady ??= fetch(chrome.runtime.getURL('fonts/anek-latin.woff2'))
+const face = (family, file, axes) => fetch(chrome.runtime.getURL(`fonts/${file}`))
   .then(r => r.arrayBuffer())
-  .then(buf => document.fonts.add(new FontFace('Seva Anek', buf, { weight: '100 800', stretch: '75% 125%' })))
-  .catch(() => {});
+  .then(buf => document.fonts.add(new FontFace(family, buf, axes)));
+const loadFont = () => fontReady ??= Promise.all([
+  face('Khali Sans', 'archivo.woff2', { weight: '100 900', stretch: '62% 125%' }),
+  face('Khali Mono', 'martian-mono.woff2', { weight: '100 800', stretch: '75% 112.5%' }),
+]).catch(() => {});
 
 const STYLES = `
   :host {
     all: initial; position: fixed; top: 16px; right: 16px; z-index: 2147483647;
-    --ink: #12211a; --muted: #55655c; --line: #e1e8e3; --wash: #f3f7f4;
-    --green: #17603c; --green-hover: #11502f; --green-deep: #0d3f27; --green-soft: #e2f1e8;
-    --saffron: #f2a93b; --warn: #855000; --warn-bg: #fff3d9; --danger: #b42318; --danger-bg: #fdecea;
-    --ease: cubic-bezier(.16, 1, .3, 1);
-    animation: enter .45s var(--ease);
+    --ink: #0B0D10; --label: #555B63; --line: #D3D6DB; --wash: #F4F5F6; --slate: #1C2127;
+    --alert: #FFD400; --danger: #B42318; --ease: cubic-bezier(.16, 1, .3, 1);
+    --sans: "Khali Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Khali Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    animation: enter .3s var(--ease);
   }
-  @keyframes enter { from { opacity: 0; transform: translateY(-12px) scale(.97); filter: blur(6px); } }
-  @keyframes swap { from { opacity: 0; transform: translateY(4px); } }
+  @keyframes enter { from { opacity: 0; transform: translateY(-8px); } }
+  @keyframes swap { from { opacity: 0; } }
   @keyframes rot { to { transform: rotate(360deg); } }
   * { box-sizing: border-box; }
-  ::selection { background: var(--green-soft); color: var(--ink); }
+  ::selection { background: var(--alert); color: var(--ink); }
   .card {
-    width: 344px; overflow: hidden; border-radius: 18px; background: #fff; color: var(--ink);
-    font: 400 13.5px/1.5 "Seva Anek", system-ui, -apple-system, "Segoe UI", sans-serif;
-    box-shadow: 0 0 0 1px rgba(13, 63, 39, .08), 0 2px 4px rgba(13, 63, 39, .06),
-      0 12px 28px -6px rgba(13, 63, 39, .2), 0 32px 64px -24px rgba(13, 63, 39, .28);
+    width: 360px; overflow: hidden; border: 1px solid var(--ink); border-radius: 2px; background: #fff; color: var(--ink);
+    font: 400 14px/1.5 var(--sans); box-shadow: 0 2px 6px rgba(11, 13, 16, .12), 0 20px 44px -14px rgba(11, 13, 16, .38);
   }
-  header { display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 14px; background: var(--green-deep); color: #fff; }
-  .logo {
-    display: grid; place-items: center; width: 30px; height: 30px; border: 1.5px solid rgba(255, 255, 255, .92);
-    border-radius: 9px; font-weight: 700; font-size: 15px; line-height: 1;
+  header { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 14px; background: var(--ink); color: #F2F3F5; }
+  .mark { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 2px; background: #F2F3F5; color: var(--ink); font: 800 15px/1 var(--sans); font-stretch: 70%; }
+  .word { font: 800 19px/1 var(--sans); font-stretch: 68%; letter-spacing: .06em; }
+  .site {
+    flex: 1; min-width: 0; overflow: hidden; padding-left: 10px; border-left: 1px solid #3A4048; color: #A3AAB2;
+    font: 500 10px/1 var(--mono); letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap;
   }
-  .name { flex: 1; font-weight: 700; font-size: 18px; font-stretch: 110%; letter-spacing: -.01em; }
-  header button {
-    display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 10px;
-    background: none; color: rgba(255, 255, 255, .78); cursor: pointer; transition: background .15s, color .15s;
-  }
-  header button:hover { background: rgba(255, 255, 255, .12); color: #fff; }
-  .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
-  .body > * { animation: swap .3s var(--ease) both; }
+  header button { display: grid; place-items: center; width: 34px; height: 34px; flex: none; padding: 0; border: 0; border-radius: 2px; background: none; color: #A3AAB2; cursor: pointer; }
+  header button:hover { background: var(--slate); color: #fff; }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 18px 16px 16px; }
+  .body > * { animation: swap .16s var(--ease) both; }
   .i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .spin { animation: rot .8s linear infinite; }
   .title { display: flex; align-items: center; gap: 12px; }
-  .badge { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 12px; background: var(--green-soft); color: var(--green); }
-  .badge.solid { background: var(--green); color: #fff; }
-  .badge.danger { background: var(--danger-bg); color: var(--danger); }
-  h2 { margin: 0; font-size: 16.5px; line-height: 1.25; font-weight: 650; font-stretch: 105%; letter-spacing: -.01em; text-wrap: balance; }
-  p { margin: 0; color: var(--muted); text-wrap: pretty; }
+  .badge { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border: 1px solid var(--ink); border-radius: 2px; color: var(--ink); }
+  .badge.solid { background: var(--ink); color: #fff; }
+  .badge.danger { border-color: var(--danger); color: var(--danger); }
+  h2 { margin: 0; font: 800 22px/1.05 var(--sans); font-stretch: 70%; letter-spacing: .01em; text-transform: uppercase; text-wrap: balance; }
+  p { margin: 0; color: var(--label); text-wrap: pretty; }
   b { font-weight: 600; }
-  .tile { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--wash); }
+  .tile { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 2px; }
   .tile > div { min-width: 0; }
-  .tile b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tile small { display: block; color: var(--muted); font-size: 12px; }
-  .avatar {
-    display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%;
-    background: var(--green); color: #fff; font-weight: 650; letter-spacing: .02em;
-  }
-  .avatar.square { border-radius: 12px; background: #fff; color: var(--green); box-shadow: 0 0 0 1px var(--line); }
-  .list { margin: 0; padding: 2px 12px; list-style: none; border: 1px solid var(--line); border-radius: 14px; }
-  .list li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 9px 0; }
+  .tile b { display: block; overflow: hidden; font: 800 20px/1.1 var(--sans); font-stretch: 70%; letter-spacing: .01em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+  .tile small { display: block; margin-top: 3px; color: var(--label); font: 500 10px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .avatar { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 2px; background: var(--ink); color: #fff; font: 800 17px/1 var(--sans); font-stretch: 70%; letter-spacing: .04em; }
+  .avatar.square { border: 1px solid var(--ink); background: #fff; color: var(--ink); }
+  .list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 2px; }
+  .list li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 9px 12px; transition: background-color .2s var(--ease); }
   .list li + li { border-top: 1px solid var(--line); }
-  .list span { display: flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
-  .list span .i { width: 16px; height: 16px; color: var(--green); }
-  .list b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+  .list span { display: flex; flex: none; align-items: center; gap: 8px; color: var(--label); font: 500 10px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .list span .i { width: 15px; height: 15px; color: var(--ink); }
+  .list b { flex: 1 1 150px; min-width: 0; overflow-wrap: break-word; text-align: right; font: 600 14px/1.4 var(--sans); font-variant-numeric: tabular-nums; }
+  .list em { flex: none; min-width: 56px; color: var(--label); font: 600 10px/1 var(--mono); font-style: normal; letter-spacing: .08em; text-align: right; text-transform: uppercase; }
+  .list li.lit { background: var(--alert); }
+  .list li.lit span, .list li.lit em { color: var(--ink); }
+  .list li.done em { color: var(--ink); }
+  .list.fill li { flex-wrap: nowrap; gap: 12px; }
+  .kv { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; min-width: 0; }
+  .list li.warn { background: var(--alert); }
+  .list li.warn span, .list li.warn em { color: var(--ink); }
   .notes li { justify-content: flex-start; align-items: flex-start; gap: 10px; }
-  .notes .i { width: 16px; height: 16px; margin-top: 2px; color: var(--green); }
-  .notes li > span { color: var(--ink); white-space: normal; }
-  .notes li.warn, .notes li.warn .i, .notes li.warn > span { color: var(--warn); }
+  .notes li > span { flex: 1; color: var(--ink); font: 400 14px/1.45 var(--sans); letter-spacing: 0; text-transform: none; }
+  .notes .i { width: 16px; height: 16px; margin-top: 2px; }
+  .notes li.warn { background: var(--alert); }
   .row { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; }
   .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 14px;
-    border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink);
-    font: inherit; font-weight: 600; cursor: pointer;
-    transition: background .15s, box-shadow .15s, transform .2s var(--ease);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 14px; border: 1px solid var(--ink);
+    border-radius: 2px; background: #fff; color: var(--ink); font: 700 12.5px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase;
+    cursor: pointer; transition: background-color .15s, box-shadow .15s, transform .2s var(--ease);
   }
   .btn:hover { background: var(--wash); }
-  .btn:active { transform: scale(.98); }
-  .btn.primary {
-    border-color: transparent; background: var(--green); color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px rgba(13, 63, 39, .3), 0 4px 12px -4px rgba(13, 63, 39, .45);
-  }
-  .btn.primary:hover { background: var(--green-hover); }
-  .btn:focus-visible, header button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
-  .foot { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .foot .i { width: 14px; height: 14px; }
-  .callout { display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 12.5px; }
+  .btn.primary { background: var(--ink); color: #fff; }
+  .btn.primary:hover { box-shadow: inset 0 -3px 0 var(--alert); }
+  .btn:active, .btn.primary:active { border-color: var(--alert); background: var(--alert); color: var(--ink); transform: translateY(1px); }
+  .btn:focus-visible, header button:focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
+  .foot { display: flex; align-items: center; gap: 6px; color: var(--label); font: 500 10px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .foot .i { width: 13px; height: 13px; }
+  .callout { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 2px; background: var(--wash); color: var(--ink); font-size: 13px; }
   .callout .i { width: 16px; height: 16px; margin-top: 2px; }
   .err { color: var(--danger); }
-  .progress { height: 6px; overflow: hidden; border-radius: 99px; background: var(--green-soft); }
-  .progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--green); transition: width .3s var(--ease); }
-  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .meta { display: flex; justify-content: space-between; color: var(--label); font: 500 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
   @media (prefers-reduced-motion: reduce) {
     :host, .body > *, .spin { animation: none; }
-    .progress i, .btn { transition: none; }
+    .list li, .btn { transition: none; }
   }
 `;
 
@@ -339,7 +423,7 @@ function panel(html, waiting = true) {
   state = waiting ? 'open' : null;
   if (!host) {
     loadFont();
-    host = document.createElement('seva-panel');
+    host = document.createElement('khali-panel');
     root = host.attachShadow({ mode: 'open' });
     root.addEventListener('click', e => {
       const act = e.target.closest('[data-act]')?.dataset.act;
@@ -348,9 +432,9 @@ function panel(html, waiting = true) {
     document.documentElement.append(host);
   }
   root.innerHTML = `<style>${STYLES}</style>
-    <div class="card" role="dialog" aria-label="Seva">
-      <header><span class="logo">S</span><span class="name">Seva</span>
-        <button data-act="settings" aria-label="Seva settings" title="Settings">${icon('settings')}</button>
+    <div class="card" role="dialog" aria-label="Khali">
+      <header><span class="mark" aria-hidden="true">K</span><span class="word">KHALI</span><span class="site">${esc(location.hostname)}</span>
+        <button data-act="settings" aria-label="Khali settings" title="Settings">${icon('settings')}</button>
         <button data-act="close" aria-label="Close" title="Close">${icon('close')}</button></header>
       <div class="body" aria-live="polite">${html}</div>
     </div>`;
@@ -366,10 +450,13 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function next() {
   if (pending.doc) return offerDoc();
+  if (pending.locker.length) return offerLocker();
   if (pending.images.length) return offerImages();
   if (filled || attached) {
     return panel(`${title('check', 'All set', 'solid')}
-      <p>Seva filled ${plural(filled, 'field')} and attached ${plural(attached, 'file')}. Check everything before you submit.</p>
+      <p>Khali ${[filled && `filled ${plural(filled, 'field')}`, attached && `attached ${plural(attached, 'file')}`].filter(Boolean).join(' and ')}. Check everything before you submit.</p>
+      ${settled.length ? `<ul class="list fill">${[...settled].sort((a, b) => (b.status === 'Missed') - (a.status === 'Missed')).map(r =>
+        `<li class="done${r.status === 'Missed' ? ' warn' : ''}"><div class="kv"><span>${r.label}</span><b>${esc(r.value)}</b></div><em>${r.status}</em></li>`).join('')}</ul>` : ''}
       ${notes.length ? `<ul class="list notes">${notes.map(n =>
         `<li class="${n.warn ? 'warn' : ''}">${icon(n.icon)}<span>${esc(n.text)}</span></li>`).join('')}</ul>` : ''}`, false);
   }
@@ -380,54 +467,66 @@ const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpper
 const keys = () => [...new Set(pending.fills.map(x => x.f.key))];
 
 function offerFill() {
-  panel(`${title('sparkles', 'I can fill this page for you')}
-    <p>This form asks for your personal details. Seva found a match in your saved profile.</p>
+  panel(`${title('form', 'I can fill this page for you')}
+    <p>This form asks for your personal details. Khali found a match in your saved profile.</p>
     <div class="tile"><span class="avatar">${esc(initials(profile.name || 'You'))}</span>
-      <div><b>${esc(profile.name || 'Your profile')}</b><small>Seva profile · ${plural(keys().length, 'field')}</small></div></div>
+      <div><b>${esc(profile.name || 'Your profile')}</b><small>Khali profile · ${plural(keys().length, 'field')}</small></div></div>
     <button class="btn primary" data-act="review">Autofill this page</button>`);
 }
 
 function offerSetup() {
   panel(`${title('user', 'Fill forms like this in one click')}
-    <p>Save your details once. Seva offers them on government forms and fills them only after you approve.</p>
+    <p>Save your details once. Khali offers them on government forms and fills them only after you approve.</p>
     <button class="btn primary" data-act="settings">Set up my profile</button>
     ${foot('lock', 'Stored only in this browser')}`);
 }
 
 function offerDoc() {
   panel(`${title('file', 'This form needs your Aadhaar')}
-    <p>Seva can fetch the copy issued by UIDAI from your DigiLocker and attach it here.</p>
+    <p>Khali can fetch the copy issued by UIDAI from your DigiLocker and attach it here.</p>
     <button class="btn primary" data-act="findDoc">Use from DigiLocker</button>
     ${foot('lock', 'Nothing is downloaded until you approve the document')}`);
+}
+
+function offerLocker() {
+  const [first] = pending.locker;
+  const one = pending.locker.length === 1;
+  panel(`${title('check', one ? `${first.type.label} is available` : 'Your documents are ready')}
+    <p>${one ? `This form asks for your ${first.type.label}. Khali found it` : 'This form asks for documents Khali found'} in your Khali Locker on Google Drive.</p>
+    <ul class="list">${pending.locker.map(x =>
+      `<li><span>${icon('file')}${x.type.label}</span><b title="${esc(x.doc.name)}">${esc(x.doc.name)}</b></li>`).join('')}</ul>
+    <div class="row"><button class="btn" data-act="skipLocker">Not now</button>
+      <button class="btn primary" data-act="attachLocker">Approve &amp; attach</button></div>
+    ${foot('lock', 'Nothing is downloaded until you approve')}`);
 }
 
 function offerImages() {
   const what = pending.images.map(x => x.type.label.toLowerCase()).join(' and ');
   panel(`${title(pending.images[0].type.kind, `Add your ${what}`)}
-    <p>Seva will resize your saved ${what} to match this form's rules.</p>
+    <p>Khali will resize your saved ${what} to match this form's rules.</p>
     <ul class="list">${pending.images.map(x =>
       `<li><span>${icon(x.type.kind)}${x.type.label}</span><b title="${specText(x.spec)}">${specText(x.spec)}</b></li>`).join('')}</ul>
     <div class="row"><button class="btn" data-act="skipImages">Not now</button>
       <button class="btn primary" data-act="attachImages">Approve &amp; attach</button></div>`);
 }
 
-function showError(message) {
+function showError(message, skip = 'skipDoc', retry = 'findDoc') {
   panel(`${title('alert', 'Couldn’t get the document', 'danger')}
     <p class="err">${esc(message)}</p>
-    <div class="row"><button class="btn" data-act="skipDoc">Skip</button>
-      <button class="btn primary" data-act="findDoc">Try again</button></div>`);
+    <div class="row"><button class="btn" data-act="${skip}">Skip</button>
+      <button class="btn primary" data-act="${retry}">Try again</button></div>`);
 }
 
 const actions = {
   close() {
-    pending = { fills: [], doc: null, images: [] };
+    pending = { fills: [], doc: null, locker: [], images: [] };
     close();
   },
   settings: () => chrome.runtime.sendMessage({ type: 'openOptions' }),
 
   review() {
     panel(`${title('shield', 'Approve sharing')}
-      <p>Seva will share these fields with this form:</p>
+      <p>Khali will share these fields with this form:</p>
       <ul class="list">${keys().map(k =>
         `<li><span>${FIELDS.find(f => f.key === k).label}</span><b title="${esc(display(k))}">${esc(display(k))}</b></li>`).join('')}</ul>
       <div class="row"><button class="btn" data-act="skipFill">Cancel</button>
@@ -438,18 +537,35 @@ const actions = {
     next();
   },
   async fill() {
-    const todo = pending.fills.filter(({ el }) => el.isConnected && isEmpty(el));
+    // State before district before city, so each dropdown has its options by the time Khali reaches it.
+    settled = [];
+    const todo = pending.fills.filter(({ el }) => el.isConnected && isEmpty(el))
+      .sort((a, b) => (CASCADE[a.f.key] || 0) - (CASCADE[b.f.key] || 0));
+    // Each row lights while it is being filled, then settles in place.
     panel(`${title('spin', 'Filling your details')}
-      <div class="progress"><i></i></div>
+      <ul class="list fill">${todo.map(({ f }) => `<li><div class="kv"><span>${f.label}</span><b>${esc(display(f.key))}</b></div><em></em></li>`).join('')}</ul>
       <p class="meta"><span class="now">Starting</span><span class="count">0 of ${todo.length}</span></p>`);
     for (const [i, { el, f }] of todo.entries()) {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      if (fill(el, f.key)) {
-        flash(el);
-        filled++;
-      }
-      root.querySelector('.progress i').style.width = `${(i + 1) / todo.length * 100}%`;
       root.querySelector('.now').textContent = f.label;
+      const row = root.querySelectorAll('.fill li')[i];
+      row.classList.add('lit');
+      row.querySelector('em').textContent = 'Filling';
+      const target = live(el);
+      let done = null;
+      // Some portals fill state and district themselves once the PIN is in; don't overwrite them.
+      if (isEmpty(target)) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        done = await fill(target, f.key);
+        if (done) {
+          flash(done);
+          filled++;
+        }
+      }
+      row.classList.remove('lit');
+      row.classList.add('done');
+      const status = done ? 'Filled' : isEmpty(live(el)) ? 'Missed' : 'Set';
+      row.querySelector('em').textContent = status;
+      settled.push({ label: f.label, value: display(f.key), status });
       root.querySelector('.count').textContent = `${i + 1} of ${todo.length}`;
       await sleep(160);
     }
@@ -467,7 +583,7 @@ const actions = {
       <div class="tile"><span class="avatar square">${icon('file')}</span>
         <div><b>${esc(doc.name)}</b><small>Issued by ${esc(doc.issuer)} · via DigiLocker</small></div></div>
       <p>Attach this document to the application?</p>
-      ${doc.demo ? `<p class="callout">${icon('alert')}<span>Demo mode: Seva will attach a sample PDF. Add your DigiLocker partner credentials in settings to fetch your real Aadhaar.</span></p>` : ''}
+      ${doc.demo ? `<p class="callout">${icon('alert')}<span>Demo mode: Khali will attach a sample PDF. Add your DigiLocker partner credentials in settings to fetch your real Aadhaar.</span></p>` : ''}
       <div class="row"><button class="btn" data-act="skipDoc">Not now</button>
         <button class="btn primary" data-act="attachDoc">Approve &amp; attach</button></div>`);
   },
@@ -479,12 +595,30 @@ const actions = {
     panel(title('spin', 'Attaching your Aadhaar'));
     const { type, data, error } = await chrome.runtime.sendMessage({ type: 'fetchDoc', uri: pending.found.uri });
     if (error) return showError(error);
-    const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-    attach(pending.doc, new File([bytes], `${pending.found.name}.${ext(type)}`, { type }));
+    attach(pending.doc, new File([fromB64(data)], `${pending.found.name}.${ext(type)}`, { type }));
     pending.doc.scrollIntoView({ block: 'center', behavior: 'smooth' });
     attached++;
     notes.push({ icon: 'file', text: `${pending.found.name} · from DigiLocker` });
     pending.doc = null;
+    next();
+  },
+
+  skipLocker() {
+    pending.locker = [];
+    next();
+  },
+  async attachLocker() {
+    panel(title('spin', 'Getting your documents from Drive'));
+    while (pending.locker.length) {
+      const { el, type, doc } = pending.locker[0];
+      const file = await chrome.runtime.sendMessage({ type: 'lockerFetch', id: doc.id });
+      if (file.error) return showError(file.error, 'skipLocker', 'attachLocker');
+      attach(el, new File([fromB64(file.data)], doc.name, { type: file.type }));
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      attached++;
+      notes.push({ icon: 'file', text: `${type.label} · from Google Drive` });
+      pending.locker.shift();
+    }
     next();
   },
 
@@ -518,16 +652,19 @@ function check(force = false) {
   [...found, ...files].forEach(x => offered.add(x.el));
 
   const hasProfile = Object.values(profile).some(Boolean);
+  // A document in the Khali Locker wins; Aadhaar falls back to DigiLocker when the locker has none.
+  const inLocker = files.map(x => ({ ...x, doc: locker.find(d => d.kind === x.type.kind && accepts(x.el, d)) })).filter(x => x.doc);
   pending = {
-    fills: found.filter(x => profile[x.f.key]),
-    doc: files.find(x => x.type.kind === 'aadhaar')?.el || null,
+    fills: found.filter(x => has(x.f.key)),
+    doc: files.find(x => x.type.kind === 'aadhaar' && !inLocker.some(l => l.el === x.el))?.el || null,
+    locker: inLocker,
     images: files.filter(x => images[x.type.kind]).map(x => ({ ...x, spec: specFor(x.el, x.type) })),
   };
 
   if (pending.fills.length) offerFill();
   else if (found.length && !hasProfile) offerSetup();
-  else if (pending.doc || pending.images.length) next();
-  else if (force) panel(`${title('search', 'Nothing to fill here')}<p>Seva didn’t find any fields it can fill on this page.</p>`, false);
+  else if (pending.doc || pending.locker.length || pending.images.length) next();
+  else if (force) panel(`${title('search', 'Nothing to fill here')}<p>Khali didn’t find any fields it can fill on this page.</p>`, false);
 }
 
 chrome.runtime.onMessage.addListener(msg => {
@@ -536,6 +673,7 @@ chrome.runtime.onMessage.addListener(msg => {
 chrome.storage.onChanged.addListener(changes => {
   if (changes.profile) profile = changes.profile.newValue || {};
   for (const k of ['photo', 'signature']) if (changes[k]) images[k] = changes[k].newValue;
+  if (changes.locker) locker = changes.locker.newValue || [];
 });
 
 // Multi-step forms swap their steps in place, so watch for new fields.
@@ -545,8 +683,9 @@ new MutationObserver(() => {
   timer = setTimeout(check, 400);
 }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
 
-chrome.storage.local.get(['profile', 'photo', 'signature']).then(({ profile: p = {}, ...imgs }) => {
+chrome.storage.local.get(['profile', 'photo', 'signature', 'locker']).then(({ profile: p = {}, locker: l = [], ...imgs }) => {
   profile = p;
+  locker = l;
   images = imgs;
   check();
 });
