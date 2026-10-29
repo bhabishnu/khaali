@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Khali test form</title>
-  <!-- Local test page for Khali. Serve it on localhost: python3 -m http.server 8000 (from the repo root). -->
+  <title>Khaali test form</title>
+  <!-- Local test page for Khaali. Serve it on localhost: python3 -m http.server 8000 (from the repo root). -->
   <style>
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f3f5f7; color: #1d2733; }
     .bar { background: #24489a; color: #fff; padding: 14px 24px; font-weight: 700; }
@@ -40,14 +40,13 @@
         <label for="addr">Address (house, street, village/town) *</label><textarea id="addr" name="addr" rows="2"></textarea>
         <label for="txtPinCode">PIN code *</label><input id="txtPinCode" name="txtPinCode" maxlength="6">
         <label for="ddlState">State *</label>
-        <select id="ddlState" name="ddlState">
-          <option value="">-- Select State --</option>
-          <option value="21">ORISSA</option><option value="29">KARNATAKA</option><option value="32">KERALA</option><option value="07">NCT OF DELHI</option>
-        </select>
+        <select id="ddlState" name="ddlState"><option value="">-- Select State --</option></select>
         <label for="ddlDistrict">District *</label>
         <select id="ddlDistrict" name="ddlDistrict" disabled><option value="">-- Select District --</option></select>
         <label for="mob">Mobile number *</label><input id="mob" name="mob" maxlength="10">
         <label for="mail">Email address *</label><input id="mail" name="mail" type="email">
+        <label for="reason">Reason for application</label><textarea id="reason" name="reason" rows="2"></textarea>
+        <label for="aadhaarCard">Aadhaar card * (PDF or JPG)</label><input id="aadhaarCard" name="aadhaarCard" type="file" accept=".pdf,.jpg,.jpeg">
       </div>
       <div class="actions"><button type="button" data-go="s2">Save and continue</button></div>
     </section>
@@ -75,17 +74,28 @@
 <script>
   const form = document.getElementById('app');
 
+  // Every state and district, from the same India Post data Khaali uses, written the way old portals write them:
+  // capitals, a few pre-rename spellings, and numeric state codes.
+  const OLD = { Odisha: 'ORISSA', Delhi: 'NCT OF DELHI', 'Bengaluru Urban': 'BANGALORE URBAN', 'Bengaluru Rural': 'BANGALORE RURAL', Mysuru: 'MYSORE' };
+  const CODE = { Karnataka: '29', Kerala: '32', Odisha: '21', Delhi: '07', Assam: '18' };
+  const places = fetch('../data/pins.json').then(r => r.json());
+  const caps = name => OLD[name] || name.toUpperCase();
+  places.then(({ states }) => {
+    document.getElementById('ddlState').insertAdjacentHTML('beforeend',
+      states.map((s, i) => `<option value="${CODE[s] || String(40 + i)}">${caps(s)}</option>`).join(''));
+  });
+
   // Like an ASP.NET UpdatePanel: districts arrive a moment after the state is picked, as a brand-new <select>.
-  const DISTRICTS = { 21: ['CUTTACK', 'KHURDA'], 29: ['BAGALKOTE', 'BANGALORE RURAL', 'BANGALORE URBAN', 'MYSORE'],
-    32: ['ERNAKULAM', 'KOZHIKODE'], '07': ['CENTRAL', 'NEW DELHI'] };
-  document.getElementById('ddlState').addEventListener('change', e => {
+  document.getElementById('ddlState').addEventListener('change', async e => {
+    const { states, districts } = await places;
+    const si = states.findIndex(s => caps(s) === e.target.selectedOptions[0].text);
     const old = document.getElementById('ddlDistrict');
     old.disabled = true;
     setTimeout(() => {
       const sel = old.cloneNode(false);
       sel.disabled = !e.target.value;
-      sel.innerHTML = '<option value="">-- Select District --</option>' +
-        (DISTRICTS[e.target.value] || []).map((d, i) => `<option value="${e.target.value}${i}">${d}</option>`).join('');
+      sel.innerHTML = '<option value="">-- Select District --</option>' + districts.filter(d => d[1] === si)
+        .map(([d], i) => `<option value="${e.target.value}${String(i).padStart(2, '0')}">${caps(d)}</option>`).join('');
       document.getElementById('ddlDistrict').replaceWith(sel);
     }, 700);
   });

@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Khali settings</title>
-  <link rel="icon" href="icons/32.png">
+  <title>Khaali settings</title>
+  <link rel="icon" href="../assets/icons/32.png">
   <style>
-    @font-face { font-family: "Khali Sans"; src: url("fonts/archivo.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
-    @font-face { font-family: "Khali Mono"; src: url("fonts/martian-mono.woff2") format("woff2"); font-weight: 100 800; font-stretch: 75% 112.5%; font-display: swap; }
+    @font-face { font-family: "Khaali Sans"; src: url("../assets/fonts/archivo.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
+    @font-face { font-family: "Khaali Mono"; src: url("../assets/fonts/martian-mono.woff2") format("woff2"); font-weight: 100 800; font-stretch: 75% 112.5%; font-display: swap; }
 
     :root {
       --ground: #EEEFF1; --surface: #FFFFFF; --field: #FFFFFF; --text: #0B0D10; --label: #555B63;
       --line: #D3D6DB; --rule: #C3C7CD; --slate: #1C2127; --on-slate: #F2F3F5; --slate-label: #A3AAB2; --slate-line: #2E343C;
       --alert: #FFD400; --button: #0B0D10; --on-button: #FFFFFF; --danger: #B42318;
-      --sans: "Khali Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-      --mono: "Khali Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --sans: "Khaali Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: "Khaali Mono", ui-monospace, "SF Mono", Menlo, monospace;
       --ease: cubic-bezier(.16, 1, .3, 1);
       color-scheme: light;
     }
@@ -65,7 +65,8 @@
     .seg.name b { margin-top: 6px; font-size: 40px; line-height: 1; font-weight: 800; font-stretch: 66%; }
     .seg.missing b { color: #6B7178; font-weight: 500; }
     .seg.lit, .seg.lit:hover { background: var(--alert); }
-    .tag { display: inline-block; margin-left: 8px; padding: 2px 6px; border-radius: 2px; background: #0B0D10; color: #FFD400; font: 600 10px/1.3 var(--mono); letter-spacing: .08em; vertical-align: 1px; }
+    /* The UPDATED tag sits on its own line under the value, flush left, however long the value is. */
+    .tag { display: block; width: fit-content; margin-top: 8px; padding: 2px 6px; border-radius: 2px; background: #0B0D10; color: #FFD400; font: 600 10px/1.3 var(--mono); letter-spacing: .08em; }
     .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
     .row3 .seg { border-top: 0; padding-right: 12px; padding-left: 16px; }
     .row3 .seg:first-child { padding-left: 20px; }
@@ -93,7 +94,7 @@
       width: 100%; height: 46px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--field); color: var(--text);
       font: 500 16px/1 var(--sans); caret-color: var(--text); transition: border-color .15s, box-shadow .15s, background-color .2s var(--ease);
     }
-    input[name=pin], input[name=mobile], input[type=date], #google-client { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+    input[name=pin], input[name=mobile], input[type=date] { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
     input:hover, select:hover { border-color: var(--label); }
     .ctl { position: relative; display: block; }
     .ctl select { appearance: none; padding-right: 42px; cursor: pointer; }
@@ -134,18 +135,8 @@
     .status-tag.ready { border-color: var(--text); background: var(--text); color: var(--ground); }
     .status-tag .i { width: 13px; height: 13px; }
 
-    /* Khali Locker */
+    /* Khaali Locker */
     .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
-    .help { padding: 14px 16px; border: 1px solid var(--rule); border-radius: 2px; background: var(--surface); font-size: 14px; }
-    .help summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; font-weight: 600; }
-    .help summary::-webkit-details-marker { display: none; }
-    .help summary .chev { transition: transform .2s var(--ease); }
-    .help[open] summary .chev { transform: rotate(90deg); }
-    .help ol { display: grid; gap: 10px; margin: 12px 0 4px; padding-left: 20px; color: var(--label); }
-    .help b { color: var(--text); }
-    .help a { color: var(--text); text-underline-offset: 3px; }
-    .redirect { display: flex; gap: 8px; margin-top: 8px; }
-    .redirect code { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--field); color: var(--text); font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
     .account { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 2px; background: var(--surface); }
     .account .avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 2px; background: var(--text); color: var(--ground); font: 800 18px/1 var(--sans); font-stretch: 70%; }
     .account div { flex: 1; min-width: 0; }
@@ -209,7 +200,7 @@
 <header class="topbar">
   <div class="topbar-in">
     <span class="mark" aria-hidden="true">K</span>
-    <span class="wordmark">KHALI</span>
+    <span class="wordmark">KHAALI</span>
     <span class="tagline">One profile. Every form.</span>
     <span class="private">
       <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="1"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/></svg>
@@ -246,7 +237,7 @@
     <form id="f">
       <section id="details">
         <h2>Your details</h2>
-        <p class="lede">Khali offers these on government forms and fills them only after you approve.</p>
+        <p class="lede">Khaali offers these on government forms and fills them only after you approve.</p>
         <div class="fields">
           <label class="wide"><span>Full name</span><input name="name" autocomplete="name" placeholder="As on your Aadhaar"></label>
           <label><span>Date of birth</span><span class="ctl"><input name="dob" type="date" autocomplete="bday"><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="1"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span></label>
@@ -260,7 +251,7 @@
 
       <section id="address">
         <h2>Address</h2>
-        <p class="lede">Type your PIN and Khali fills in the district and state. Forms with a single address box get the whole address on one line.</p>
+        <p class="lede">Type your PIN and Khaali fills in the district and state. Forms with a single address box get the whole address on one line.</p>
         <div class="fields">
           <label class="wide"><span>House / flat / building</span><input name="line1" autocomplete="address-line1" placeholder="Flat 4B, Shanti Apartments"></label>
           <label class="wide"><span>Street / area / locality</span><input name="line2" autocomplete="address-line2" placeholder="42 MG Road, Shivajinagar"></label>
@@ -275,7 +266,7 @@
 
       <section id="photos">
         <h2>Photo and signature</h2>
-        <p class="lede">Add them once. Khali crops and compresses a copy to each form's size rules when you attach it.</p>
+        <p class="lede">Add them once. Khaali crops and compresses a copy to each form's size rules when you attach it.</p>
         <div class="uploads">
           <label class="drop photo">
             <span class="drop-label">Photo <span data-for="photo">Add</span></span>
@@ -303,23 +294,11 @@
       </section>
 
       <section id="locker">
-        <div class="sec-top"><h2>Khali Locker</h2><span class="status-tag" id="drive-status"></span></div>
-        <p class="lede">Your documents, kept in a “Khali Locker” folder in your own Google Drive. Khali attaches the right one when a form asks.</p>
+        <div class="sec-top"><h2>Khaali Locker</h2><span class="status-tag" id="drive-status"></span></div>
+        <p class="lede">Your documents, kept in a “Khaali Locker” folder in your own Google Drive. Khaali attaches the right one when a form asks.</p>
         <div class="stack">
           <div id="drive-setup" class="stack">
-            <label><span>Google OAuth client ID</span><input id="google-client" autocomplete="off" spellcheck="false" placeholder="1234567890-abc.apps.googleusercontent.com"></label>
-            <details class="help">
-              <summary><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>How to get a client ID (about 5 minutes)</summary>
-              <ol>
-                <li>Create a project in the <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a>.</li>
-                <li>Turn on the <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Drive API</a> for it.</li>
-                <li>Set up the OAuth consent screen as <b>External</b> and add your own Google account as a test user.</li>
-                <li>Create an OAuth client ID of type <b>Web application</b> with this authorised redirect URI:
-                  <div class="redirect"><code class="redirect-uri"></code><button class="btn" type="button" data-copy>Copy</button></div>
-                </li>
-                <li>Paste the client ID above and connect.</li>
-              </ol>
-            </details>
+            <p class="hint">Sign in with your Google account. Khaali can only see the files it adds to its own folder, never the rest of your Drive.</p>
             <div><button class="btn primary" type="button" id="drive-connect">Connect Google Drive</button></div>
           </div>
           <div id="drive-ready" class="stack" hidden>
@@ -335,20 +314,6 @@
             </div>
           </div>
           <p class="hint" id="locker-msg" role="status"></p>
-        </div>
-      </section>
-
-      <section id="digilocker">
-        <div class="sec-top"><h2>DigiLocker</h2><span class="status-tag" id="dl-status"></span></div>
-        <p class="lede">Fetching your real Aadhaar needs partner credentials from API Setu. Without them, Khali attaches a sample PDF so you can try the flow.</p>
-        <div class="fields">
-          <label><span>Client ID</span><input name="clientId" autocomplete="off" spellcheck="false"></label>
-          <label><span>Client secret</span><input name="clientSecret" type="password" autocomplete="off"></label>
-          <div class="wide">
-            <span class="label">Redirect URI</span>
-            <div class="redirect"><code class="redirect-uri"></code><button class="btn" type="button" data-copy>Copy</button></div>
-            <p class="hint" style="margin-top: 8px">Register this exact URI with DigiLocker when you create your client.</p>
-          </div>
         </div>
       </section>
 

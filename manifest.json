@@ -1,25 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "Khali",
+  "name": "Khaali",
   "version": "0.1.0",
-  "description": "Autofill government forms from your saved profile and attach documents from DigiLocker or your Google Drive.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvW7mJXd9+QX+Ey3oI2tnQJH3EIAZAkqmDMV+yzgASZGyB7P1EL6lyG8xSq5ol3C5zjPm0ke4m1oATyxPpfexLX+L/nF39WLrjruhGtnYW7CFfSJ8CH8SYqQDlgUeiGXM9pmqAXgdmWCqEhUCJwHMMJ+0OPk1RWt23kjefGZwydPXd7X7T9NE/ZfQIKQ87+5CpieaPvPtd6K/UH8TW2SUbqglkVdyqkHuyNNzb2/lldXxSBQzVhMnSXwctbgf6kzr+pQvvN7oF+Y5xLNUyAD5qjGPQCHYZ+UP72Tr4rw2SYzjL/wsg72Y/depbLIMkT/q7pDuNrRMLfbnCexi+BVjXwIDAQAB",
+  "description": "Autofill government forms from your saved profile and attach your documents from Google Drive.",
   "icons": {
-    "16": "icons/16.png",
-    "32": "icons/32.png",
-    "48": "icons/48.png",
-    "128": "icons/128.png"
+    "16": "assets/icons/16.png",
+    "32": "assets/icons/32.png",
+    "48": "assets/icons/48.png",
+    "128": "assets/icons/128.png"
   },
   "permissions": [
     "storage",
     "identity"
   ],
   "host_permissions": [
-    "https://api.digitallocker.gov.in/*",
     "https://www.googleapis.com/*",
     "https://oauth2.googleapis.com/*"
   ],
+  "oauth2": {
+    "client_id": "650091237937-hhqbr66eg87b6qa55dkbqfjp3mschc5j.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js"
   },
   "content_scripts": [
     {
@@ -31,16 +37,16 @@
         "http://127.0.0.1/*"
       ],
       "js": [
-        "kinds.js",
-        "content.js"
+        "src/kinds.js",
+        "src/content.js"
       ]
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "fonts/archivo.woff2",
-        "fonts/martian-mono.woff2"
+        "assets/fonts/archivo.woff2",
+        "assets/fonts/martian-mono.woff2"
       ],
       "matches": [
         "*://*.gov.in/*",
@@ -52,11 +58,11 @@
     }
   ],
   "action": {
-    "default_title": "Khali",
+    "default_title": "Khaali",
     "default_icon": {
-      "16": "icons/16.png",
-      "32": "icons/32.png"
+      "16": "assets/icons/16.png",
+      "32": "assets/icons/32.png"
     }
   },
-  "options_page": "options.html"
+  "options_page": "src/options.html"
 }

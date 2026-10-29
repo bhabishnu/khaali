@@ -6,8 +6,6 @@ const svg = path => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${pat
 const CHECK = svg('<path d="M20 6 9 17l-5-5"/>');
 const ALERT = svg('<path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>');
 
-const redirect = chrome.identity.getRedirectURL();
-for (const el of document.querySelectorAll('.redirect-uri')) el.textContent = redirect;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const send = msg => chrome.runtime.sendMessage(msg);
 
@@ -19,19 +17,13 @@ function preview(kind, url) {
   renderDoc();
 }
 
-function digilockerStatus(clientId) {
-  const pill = document.getElementById('dl-status');
-  pill.classList.toggle('ready', !!clientId);
-  pill.innerHTML = clientId ? `${CHECK}<span>Credentials saved</span>` : `${ALERT}<span>Demo mode</span>`;
-}
-
 function say(text, tone = '') {
   status.className = tone;
   status.innerHTML = tone === 'saved' ? `${CHECK}<span>${text}</span>` : text;
 }
 
 // India Post's PIN directory, bundled so the lookup never leaves this computer.
-const places = fetch('data/pins.json').then(r => r.json());
+const places = fetch('../data/pins.json').then(r => r.json());
 const pinHint = document.getElementById('pin-hint');
 
 async function districtList() {
@@ -46,7 +38,7 @@ form.elements.pin.addEventListener('input', async e => {
   pinHint.textContent = '';
   if (pin.length !== 6) return;
   const { states, districts, pins } = await places;
-  if (pins[pin] === undefined) return (pinHint.textContent = 'Khali doesn’t know this PIN. Check it, or pick the district and state yourself.');
+  if (pins[pin] === undefined) return (pinHint.textContent = 'Khaali doesn’t know this PIN. Check it, or pick the district and state yourself.');
   const [district, si] = districts[pins[pin]];
   form.elements.state.value = states[si];
   form.elements.district.value = district;
@@ -55,17 +47,16 @@ form.elements.pin.addEventListener('input', async e => {
   pinHint.textContent = `District and state filled in from PIN ${pin}.`;
 });
 
-Promise.all([places, chrome.storage.local.get(['profile', 'clientId', 'clientSecret', ...IMAGES])]).then(([{ states }, saved]) => {
-  const { profile = {}, photo, signature, ...digilocker } = saved;
+Promise.all([places, chrome.storage.local.get(['profile', ...IMAGES])]).then(([{ states }, saved]) => {
+  const { profile = {}, photo, signature } = saved;
   form.elements.state.insertAdjacentHTML('beforeend', states.map(s => `<option>${esc(s)}</option>`).join(''));
   // Older profiles kept the address in one box; it moves into the first line until you split it up.
   if (profile.address && !profile.line1) profile.line1 = profile.address;
-  for (const [k, v] of Object.entries({ ...profile, ...digilocker })) if (form.elements[k]) form.elements[k].value = v;
+  for (const [k, v] of Object.entries(profile)) if (form.elements[k]) form.elements[k].value = v;
   districtList();
   renderDoc();
   preview('photo', photo);
   preview('signature', signature);
-  digilockerStatus(digilocker.clientId);
 });
 
 for (const kind of IMAGES) {
@@ -78,14 +69,6 @@ for (const kind of IMAGES) {
 form.addEventListener('input', e => e.target.closest('#locker') || say('Unsaved changes'));
 form.addEventListener('input', () => renderDoc());
 form.addEventListener('change', () => renderDoc());
-
-for (const btn of document.querySelectorAll('[data-copy]')) {
-  btn.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(redirect);
-    btn.textContent = 'Copied';
-    setTimeout(() => (btn.textContent = 'Copy'), 1500);
-  });
-}
 
 // Phone photos run to several MB; keep a 1600px JPEG master so storage stays small. Forms get their own size later.
 async function shrink(file) {
@@ -119,19 +102,15 @@ form.addEventListener('submit', async e => {
   }
   await chrome.storage.local.set({
     profile: Object.fromEntries(PROFILE.map(k => [k, data[k].trim()])), // drops the old single-box address
-    clientId: data.clientId.trim(),
-    clientSecret: data.clientSecret.trim(),
     ...images,
   });
-  await chrome.storage.session.remove('token'); // credentials may have changed
   for (const kind of IMAGES) form.elements[kind].value = '';
-  digilockerStatus(data.clientId.trim());
   lit.clear();
   renderDoc();
   say('Saved', 'saved');
 });
 
-// ---------- Khali Locker (Google Drive) ----------
+// ---------- Khaali Locker (Google Drive) ----------
 const LOCKER_KINDS = FILES.filter(f => f.locker);
 const FILE_ICON = svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>');
 const $ = id => document.getElementById(id);
@@ -166,19 +145,13 @@ function renderDrive({ driveUser, locker = [] }) {
 
 const loadDrive = () => chrome.storage.local.get(['driveUser', 'locker']).then(renderDrive);
 chrome.storage.onChanged.addListener(changes => (changes.driveUser || changes.locker) && loadDrive());
-chrome.storage.local.get(['googleClientId', 'driveUser']).then(({ googleClientId = '', driveUser }) => {
-  $('google-client').value = googleClientId;
+chrome.storage.local.get('driveUser').then(({ driveUser }) => {
   loadDrive();
   // Refresh from Drive in case files changed elsewhere; stay quiet if Google needs a fresh sign-in.
   if (driveUser) send({ type: 'lockerList', interactive: false });
 });
 
 $('drive-connect').addEventListener('click', async () => {
-  const clientId = $('google-client').value.trim();
-  if (!clientId.endsWith('.apps.googleusercontent.com')) {
-    return lockerSay('That doesn’t look like a Google client ID. It ends in .apps.googleusercontent.com.', 'error');
-  }
-  await chrome.storage.local.set({ googleClientId: clientId });
   $('drive-connect').disabled = true;
   lockerSay('Finish signing in on the Google window.');
   const res = await send({ type: 'driveConnect' });
@@ -188,7 +161,7 @@ $('drive-connect').addEventListener('click', async () => {
 
 $('drive-disconnect').addEventListener('click', async () => {
   await send({ type: 'driveDisconnect' });
-  lockerSay('Disconnected. Your documents are still in the Khali Locker folder in your Drive.');
+  lockerSay('Disconnected. Your documents are still in the Khaali Locker folder in your Drive.');
 });
 
 $('doc-file').addEventListener('change', async e => {
@@ -204,7 +177,7 @@ $('doc-file').addEventListener('change', async e => {
     fr.readAsDataURL(file);
   });
   const res = await send({ type: 'lockerUpload', kind: $('doc-kind').value, name: file.name, mime: file.type, data });
-  lockerSay(res.error || `${file.name} is in your Khali Locker.`, res.error ? 'error' : 'saved');
+  lockerSay(res.error || `${file.name} is in your Khaali Locker.`, res.error ? 'error' : 'saved');
 });
 
 $('docs').addEventListener('click', async e => {
@@ -225,7 +198,7 @@ const born = iso => iso ? new Date(`${iso}T00:00`).toLocaleDateString('en-IN', {
 // Barcode-style strip: one bar per detail, its stroke widths drawn from the value; a missing detail leaves a gap.
 const strokes = v => [0, 1, 2, 3].map(i => 1 + ((v.charCodeAt((i * 3) % v.length) + i) % 4));
 
-// Changes Khali makes for you (district and state from a PIN) stay lit until you look at them.
+// Changes Khaali makes for you (district and state from a PIN) stay lit until you look at them.
 const lit = new Set();
 const light = (...keys) => {
   keys.forEach(k => lit.add(k));
