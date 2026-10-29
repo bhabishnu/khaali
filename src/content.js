@@ -878,10 +878,16 @@ Object.assign(actions, {
   },
   async installLang() {
     const btn = root.querySelector('.go');
+    const code = voice.lang, lang = langName(code);
     btn.disabled = true;
     btn.textContent = 'Downloading…';
-    const ok = await Speech().install({ langs: [voice.lang], processLocally: true }).catch(() => false);
-    if (!ok) root.querySelector('.transcript').innerHTML = `<p class="err">Couldn’t download ${langName(voice.lang)}. You can still use Google’s speech service.</p>`;
+    // Chrome gives no progress, and the first download takes about half a minute: say so, or it looks stuck.
+    root.querySelector('.transcript').innerHTML = `<p class="said">Downloading ${lang} to this computer. It takes about half a minute, and only happens once.</p>`;
+    const ok = await Speech().install({ langs: [code], processLocally: true }).catch(() => false);
+    const box = root.querySelector('.transcript');
+    if (!box || voice.lang !== code) return; // closed, or switched language while it downloaded
+    box.innerHTML = ok ? `<p class="said">${lang} is ready. Press Start and speak.</p>`
+      : `<p class="err">Couldn’t download ${lang}. You can still use Google’s speech service.</p>`;
     btn.disabled = false;
     await refreshMode();
     if (!ok && voice.mode === 'download') voice.mode = 'cloud';
